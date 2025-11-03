@@ -26,7 +26,6 @@ export async function buildApp() {
   });
 
   app.use('/auth', authRouter);
-
   return app;
 }
 
