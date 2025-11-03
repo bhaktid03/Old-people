@@ -1,6 +1,7 @@
 import express from 'express';
 import { connectMongo, getDb } from './config/mongo.js';
 import { logger } from './services/logger.js';
+import { authRouter } from './routes/auth.routes.js';
 
 export async function buildApp() {
   await connectMongo();
@@ -23,6 +24,8 @@ export async function buildApp() {
       res.status(500).json({ ok: false, error: 'DB ping failed' });
     }
   });
+
+  app.use('/auth', authRouter);
 
   return app;
 }
