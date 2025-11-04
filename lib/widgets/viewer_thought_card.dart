@@ -178,6 +178,46 @@ class _AudioRow extends StatelessWidget {
   }
 }
 
+class _VideoPlayer extends StatelessWidget {
+  const _VideoPlayer({this.onPlay});
+
+  final VoidCallback? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(
+            Icons.videocam_rounded,
+            size: 48,
+            color: AppColors.textMuted,
+          ),
+          Positioned(
+            bottom: Spacing.md,
+            child: ElevatedButton.icon(
+              onPressed: onPlay,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brand,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: Text(L10n.play),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ThoughtVideoPlayer extends StatefulWidget {
   const _ThoughtVideoPlayer({required this.videoPath});
 

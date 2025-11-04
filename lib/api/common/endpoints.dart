@@ -3,7 +3,7 @@
 
 /// Base URL for the API. Keep this as a single source of truth.
 /// Example: https://api.example.com
-String apiBaseUrl = 'http://10.19.1.115:4000';
+String apiBaseUrl = 'https://05dd4682846e.ngrok-free.app';
 
 /// Helpers for building endpoint URLs from the base.
 class Endpoints {
