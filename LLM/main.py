@@ -40,7 +40,7 @@ Return *only* the summary headline and nothing else.
 prompt = ChatPromptTemplate.from_template(prompt_template)
 
 # 3b. Initialize your LLM (Gemini)
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", 
+model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", 
                              temperature=0.3)
 
 # 3c. Initialize the Output Parser
