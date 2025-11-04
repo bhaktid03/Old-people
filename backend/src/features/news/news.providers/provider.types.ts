@@ -7,6 +7,9 @@ export type NewsItem = {
   publishedAt?: string;
   source: string;
   language?: string; // ISO 639-1 if known from source
+  contentHtml?: string; // Full article content when available (HTML)
+  category?: string; // Optional category label
+  categories?: string[]; // Optional multiple categories/sections
 };
 
 export interface NewsProvider {

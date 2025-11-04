@@ -267,6 +267,19 @@ const options: swaggerJsdoc.Options = {
               format: 'uri',
               description: 'URL to the article image',
             },
+            contentHtml: {
+              type: 'string',
+              description: 'Full article content as HTML when available',
+            },
+            category: {
+              type: 'string',
+              description: 'Article category when available',
+            },
+            categories: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'All categories/sections associated with the article',
+            },
             publishedAt: {
               type: 'string',
               format: 'date-time',

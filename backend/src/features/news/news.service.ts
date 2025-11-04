@@ -17,13 +17,19 @@ export type GetNewsOptions = {
   provider?: keyof typeof PROVIDERS;
   limit?: number;
   targetLang?: string | null;
+  categories?: string[];
 };
 
 export async function getNews(opts: GetNewsOptions): Promise<NewsItem[]> {
   const provider = PROVIDERS[opts.provider || "indian_express"];
   const limit = Math.min(Math.max(opts.limit || 20, 1), 50);
   const items = await provider.fetchLatest(limit);
-  return items;
+  if (!opts.categories || opts.categories.length === 0) return items;
+  const wanted = new Set(opts.categories.map(c => String(c).toLowerCase().trim()));
+  return items.filter(it => {
+    const list = (it.categories || (it.category ? [it.category] : [])).map(c => String(c).toLowerCase().trim());
+    return list.some(c => wanted.has(c));
+  });
 }
 
 
