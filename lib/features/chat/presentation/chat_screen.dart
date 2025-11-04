@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/colors.dart';
 import '../../../app/theme/spacing.dart';
+import '../../../widgets/mic_dictation_button.dart';
 import '../data/fake_chat_repository.dart';
 import '../data/user_model.dart';
 import '../data/chat_message_model.dart';
@@ -450,6 +451,11 @@ class _MessageInputState extends State<_MessageInput> {
               ),
             ),
             const SizedBox(width: Spacing.sm),
+                MicDictationButton(
+                  controller: widget.controller,
+                  size: 48,
+                ),
+                const SizedBox(width: Spacing.sm),
             Container(
               decoration: BoxDecoration(
                 color: _hasText ? AppColors.brand : AppColors.outline.withOpacity(0.3),

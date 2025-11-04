@@ -3,6 +3,7 @@ import '../../../app/theme/spacing.dart';
 import '../../../app/theme/colors.dart';
 import '../../../core/localization/l10n.dart';
 import '../../../widgets/community_post_card.dart';
+import '../../../widgets/mic_dictation_button.dart';
 
 class CommunityWallScreen extends StatefulWidget {
   const CommunityWallScreen({super.key});
@@ -284,16 +285,28 @@ class _ComposerSheetState extends State<_ComposerSheet> {
               const SizedBox(height: Spacing.md),
               Text(L10n.shareYourVichaar, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: Spacing.md),
-              TextField(
-                controller: _controller,
-                maxLines: null,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: L10n.tellUsPlaceholder,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      maxLines: null,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: L10n.tellUsPlaceholder,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: Spacing.sm),
+                  MicDictationButton(
+                    controller: _controller,
+                    size: 48,
+                  ),
+                ],
               ),
               if (_images.isNotEmpty || _videoThumb != null) ...[
                 const SizedBox(height: Spacing.md),
