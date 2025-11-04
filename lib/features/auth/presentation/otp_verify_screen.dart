@@ -15,7 +15,7 @@ class OtpVerifyScreen extends StatefulWidget {
 	});
 
 	final String phoneNumber;
-	final void Function(String? displayName) onVerified;
+	final void Function({String? displayName, String? userId}) onVerified;
 	final VoidCallback onEditPhone;
 	final AuthRepository authRepository;
 
@@ -76,11 +76,13 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
 			final res = await widget.authRepository.verifyOtp(widget.phoneNumber, code);
 			if (!mounted) return;
 			if (res['ok'] == true) {
-				final String? displayName = (res['user'] is Map<String, dynamic>)
-					? (res['user']['displayName'] as String?)
+				final Map<String, dynamic>? user = res['user'] is Map<String, dynamic>
+					? (res['user'] as Map<String, dynamic>)
 					: null;
+				final String? displayName = user?['displayName'] as String?;
+				final String? userId = user?['_id'] as String?;
 				UiUtils.showTopSnackBar(context: context, message: 'OTP verified', isSuccess: true);
-				widget.onVerified(displayName);
+				widget.onVerified(displayName: displayName, userId: userId);
 			} else {
 				setState(() {
 					_verifying = false;

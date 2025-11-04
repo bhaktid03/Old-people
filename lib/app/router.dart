@@ -6,6 +6,7 @@ import '../features/auth/presentation/phone_login_screen.dart';
 import '../features/auth/presentation/otp_verify_screen.dart';
 import '../core/ui/ui_utils.dart';
 import '../features/profile/presentation/profile_setup_screen.dart';
+import '../core/session/session_manager.dart';
 
 final appRouter = RouterConfig<Object>(
 	routerDelegate: _AppRouterDelegate(),
@@ -20,11 +21,24 @@ class _AppRouterDelegate extends RouterDelegate<Object>
 	final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 	final AuthRepository _authRepository = AuthRepository();
+	final SessionManager _session = SessionManager();
 	final ValueNotifier<bool> _isAuthenticated = ValueNotifier<bool>(false);
 	String? _phoneNumber;
 	bool _awaitingOtp = false;
 	bool _needsProfileSetup = false;
 	String? _prefillDisplayName;
+
+	_AppRouterDelegate() {
+		_initialize();
+	}
+
+	Future<void> _initialize() async {
+		await _session.init();
+		if (_session.userId != null) {
+			_isAuthenticated.value = true;
+			notifyListeners();
+		}
+	}
 
   Future<void> _onPhoneSubmitted(String phone) async {
 		final BuildContext? ctx = navigatorKey.currentContext;
@@ -47,11 +61,20 @@ class _AppRouterDelegate extends RouterDelegate<Object>
 		}
 	}
 
-	void _onOtpVerified(String? displayName) {
-		// After OTP, show profile setup screen and prefill display name if provided
+	void _onOtpVerified({String? displayName, String? userId}) {
+		// Save session immediately
+		if (userId != null && userId.isNotEmpty) {
+			_session.saveUser(userId: userId, displayName: displayName);
+		}
 		_prefillDisplayName = displayName;
-		_needsProfileSetup = true;
 		_awaitingOtp = false;
+		// If display name exists, skip profile setup and go home
+		if (displayName != null && displayName.isNotEmpty) {
+			_isAuthenticated.value = true;
+			_needsProfileSetup = false;
+		} else {
+			_needsProfileSetup = true;
+		}
 		notifyListeners();
 	}
 
@@ -119,5 +142,3 @@ class _AppRouteInformationParser
     return routeInformation.location ?? '/';
   }
 }
-
-
