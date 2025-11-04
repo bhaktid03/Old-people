@@ -11,6 +11,7 @@ class ViewerThought {
     this.remoteFileId,
     this.duration,
     this.status = ThoughtStatus.pending,
+    this.llmReply,
     required this.createdAt,
   });
 
@@ -24,6 +25,7 @@ class ViewerThought {
   final String? remoteFileId; // backend fileId (GridFS)
   final Duration? duration;
   final ThoughtStatus status; // pending, uploaded, approved, flagged
+  final String? llmReply;
   final DateTime createdAt;
 
   factory ViewerThought.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class ViewerThought {
           ? Duration(milliseconds: json['durationMs'] as int)
           : null,
       status: ThoughtStatus.fromString(json['status'] as String? ?? 'pending'),
+      llmReply: json['llmReply'] as String?,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -57,6 +60,7 @@ class ViewerThought {
         'remoteFileId': remoteFileId,
         'durationMs': duration?.inMilliseconds,
         'status': status.toString(),
+        'llmReply': llmReply,
         'createdAt': createdAt.toIso8601String(),
       };
 }

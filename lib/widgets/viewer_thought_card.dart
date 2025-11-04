@@ -75,6 +75,12 @@ class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
                       : 'Transcript not available',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
+              if (widget.thought.llmReply != null && widget.thought.llmReply!.isNotEmpty) ...[
+                const SizedBox(height: Spacing.sm),
+                Text('Assistant reply', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 6),
+                Text(widget.thought.llmReply!, style: Theme.of(context).textTheme.bodyLarge),
+              ],
             ] else if (widget.thought.type == ThoughtType.video) ...[
               _VideoPlayer(onPlay: widget.onPlay),
               if (widget.thought.text != null && widget.thought.text!.isNotEmpty) ...[

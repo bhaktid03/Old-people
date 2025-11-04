@@ -8,6 +8,7 @@ import '../data/viewer_thought_model.dart';
 import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
 import '../../../services/audio_player_service.dart';
+import '../../../services/voice_interpret_service.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key, required this.headline});
@@ -168,11 +169,12 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               path = audioResult['path'] as String?;
               transcript = (audioResult['transcript'] as String?)?.trim();
             }
+            final thoughtId = DateTime.now().millisecondsSinceEpoch.toString();
             setState(() {
               _thoughts.insert(
                 0,
                 ViewerThought(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: thoughtId,
                   userName: 'You',
                   type: ThoughtType.audio,
                   audioUrl: path,
@@ -182,6 +184,42 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               );
             });
             _announce(context, 'Audio thought added');
+
+            // Send to server for Whisper STT + LLM
+            if (path != null && path.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Uploading for transcription...')),
+              );
+              try {
+                final resp = await VoiceInterpretService().uploadAndInterpret(
+                  filePath: path,
+                  language: L10n.locale.value == 'hi' ? 'hi' : 'en',
+                );
+                final serverTranscript = (resp['transcript'] as String?)?.trim();
+                final llmReply = (resp['llmReply'] as String?)?.trim();
+                if (!mounted) return;
+                setState(() {
+                  final idx = _thoughts.indexWhere((t) => t.id == thoughtId);
+                  if (idx != -1) {
+                    final t = _thoughts[idx];
+                    _thoughts[idx] = ViewerThought(
+                      id: t.id,
+                      userName: t.userName,
+                      type: t.type,
+                      text: (serverTranscript?.isNotEmpty ?? false) ? serverTranscript : t.text,
+                      audioUrl: t.audioUrl,
+                      createdAt: t.createdAt,
+                      llmReply: llmReply,
+                    );
+                  }
+                });
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Transcription failed: $e')),
+                );
+              }
+            }
           }
           break;
         case 'type_text':
