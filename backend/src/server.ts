@@ -6,7 +6,7 @@ async function main() {
   const env = loadEnv();
   await connectMongo(env.MONGODB_URI, env.DB_NAME);
   const app = createApp();
-  const port = Number(env.PORT || 3000);
+  const port = Number(env.PORT || 4000);
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`server listening on :${port}`);

@@ -8,6 +8,42 @@ function normalizePhone(phone: string): string {
   return trimmed;
 }
 
+/**
+ * @swagger
+ * /auth/otp/send:
+ *   post:
+ *     summary: Send OTP to phone number
+ *     description: Sends an OTP code to the provided phone number via SMS
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SendOtpRequest'
+ *           example:
+ *             phone: "+919876543210"
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Bad request - Invalid phone number or missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function sendOtpHandler(req: Request, res: Response) {
   try {
     const phone = normalizePhone(String(req.body.phone || ''));
@@ -18,6 +54,43 @@ export async function sendOtpHandler(req: Request, res: Response) {
   }
 }
 
+/**
+ * @swagger
+ * /auth/otp/verify:
+ *   post:
+ *     summary: Verify OTP code
+ *     description: Verifies the OTP code sent to the phone number
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/VerifyOtpRequest'
+ *           example:
+ *             phone: "+919876543210"
+ *             code: "123456"
+ *     responses:
+ *       200:
+ *         description: OTP verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Bad request - Invalid or expired code, or missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function verifyOtpHandler(req: Request, res: Response) {
   try {
     const phone = normalizePhone(String(req.body.phone || ''));
