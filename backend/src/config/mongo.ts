@@ -15,3 +15,18 @@ export function getDb(): Db {
   return db;
 }
 
+export function isMongoConnected(): boolean {
+  return !!db;
+}
+
+export async function pingMongo(): Promise<boolean> {
+  try {
+    if (!db) return false;
+    // The ping command is cheap and does not require auth beyond the connection
+    await db.command({ ping: 1 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+

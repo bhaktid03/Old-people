@@ -3,6 +3,8 @@ export type UserDoc = {
   phone?: string;
   email?: string;
   displayName?: string;
+  online?: boolean;
+  lastSeenAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 };

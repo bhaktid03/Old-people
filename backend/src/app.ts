@@ -4,6 +4,7 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import swaggerUi from "swagger-ui-express";
 import { logger } from "./services/logger.js";
+import { isMongoConnected, pingMongo } from "./config/mongo.js";
 import routes from "./routes/index.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { swaggerSpec } from "./config/swagger.js";
@@ -46,6 +47,25 @@ export function createApp() {
    *               $ref: '#/components/schemas/HealthCheckResponse'
    */
   app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
+  /**
+   * @swagger
+   * /readyz:
+   *   get:
+   *     summary: Readiness check (DB connectivity)
+   *     tags:
+   *       - Health
+   *     responses:
+   *       200:
+   *         description: Ready
+   *       503:
+   *         description: Not ready
+   */
+  app.get("/readyz", async (_req, res) => {
+    const connected = isMongoConnected() && await pingMongo();
+    if (!connected) return res.status(503).json({ ok: false, reason: "db_unavailable" });
+    res.json({ ok: true });
+  });
 
   // Swagger documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

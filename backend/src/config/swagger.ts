@@ -39,6 +39,86 @@ const options: swaggerJsdoc.Options = {
           },
           required: ['_id', 'createdAt', 'updatedAt']
         },
+        CommunityAuthor: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            displayName: { type: 'string' },
+            imageUrl: { type: 'string', format: 'uri' },
+          },
+          required: ['userId']
+        },
+        CommunityPost: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            author: { $ref: '#/components/schemas/CommunityAuthor' },
+            text: { type: 'string' },
+            media: { type: 'array', items: { type: 'object', properties: { type: { type: 'string', enum: ['image','video','audio'] }, url: { type: 'string', format: 'uri' }, mimeType: { type: 'string' } }, required: ['type','url'] } },
+            likeUserIds: { type: 'array', items: { type: 'string' } },
+            commentsCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id','author','createdAt','updatedAt']
+        },
+        CommunityComment: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            postId: { type: 'string' },
+            author: { $ref: '#/components/schemas/CommunityAuthor' },
+            text: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id','postId','author','text','createdAt','updatedAt']
+        },
+        Conversation: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string', description: 'Conversation ID' },
+            type: { type: 'string', enum: ['solo', 'group'] },
+            memberIds: { type: 'array', items: { type: 'string' } },
+            adminIds: { type: 'array', items: { type: 'string' } },
+            name: { type: 'string' },
+            avatarUrl: { type: 'string', format: 'uri' },
+            lastMessageId: { type: 'string' },
+            lastMessageAt: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id', 'type', 'memberIds', 'createdAt', 'updatedAt']
+        },
+        MessageReceipt: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            deliveredAt: { type: 'string', format: 'date-time' },
+            seenAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['userId']
+        },
+        Message: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            conversationId: { type: 'string' },
+            senderId: { type: 'string' },
+            type: { type: 'string', enum: ['text', 'image', 'voice'] },
+            text: { type: 'string' },
+            mediaUrl: { type: 'string', format: 'uri' },
+            mediaMimeType: { type: 'string' },
+            voiceDurationMs: { type: 'integer' },
+            receipts: { type: 'array', items: { $ref: '#/components/schemas/MessageReceipt' } },
+            editedAt: { type: 'string', format: 'date-time' },
+            deletedAt: { type: 'string', format: 'date-time' },
+            deletedForUserIds: { type: 'array', items: { type: 'string' } },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id', 'conversationId', 'senderId', 'type', 'createdAt', 'updatedAt']
+        },
         Profile: {
           type: 'object',
           properties: {

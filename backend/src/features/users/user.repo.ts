@@ -39,4 +39,15 @@ export async function deleteUser(userId: string): Promise<boolean> {
   return res.deletedCount === 1;
 }
 
+export async function setUserPresence(userId: string, online: boolean): Promise<UserDoc | null> {
+  const db = getDb();
+  const now = new Date();
+  const toSet: any = { online, updatedAt: now };
+  if (!online) toSet.lastSeenAt = now;
+  const res = await db.collection<UserDoc>(COLLECTION)
+    .findOneAndUpdate({ _id: userId }, { $set: toSet }, { returnDocument: "after" }) as ModifyResult<UserDoc>;
+  const value = (res && (res as ModifyResult<UserDoc>).value) ? (res as ModifyResult<UserDoc>).value as UserDoc : null;
+  return value;
+}
+
 
