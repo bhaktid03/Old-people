@@ -27,6 +27,101 @@ const options: swaggerJsdoc.Options = {
     ],
     components: {
       schemas: {
+        MediaUploadResponse: {
+          type: 'object',
+          properties: {
+            fileId: { type: 'string' },
+            contentType: { type: 'string' },
+            sizeBytes: { type: 'integer' },
+            thoughtId: { type: 'string', nullable: true, description: 'Thought id if provided during upload' },
+          },
+        },
+        Thought: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Thought ID' },
+            newsUrl: { type: 'string', format: 'uri', description: 'Canonical news article URL' },
+            userId: { type: 'string', description: 'Author user ID' },
+            contentType: { type: 'string', enum: ['text', 'audio', 'video'] },
+            content: {
+              oneOf: [
+                {
+                  type: 'object',
+                  properties: { type: { const: 'text' }, text: { type: 'string' } },
+                  required: ['type', 'text'],
+                },
+                {
+                  type: 'object',
+                  properties: {
+                    type: { const: 'audio' },
+                    audioUrl: { type: 'string', format: 'uri' },
+                    transcript: { type: 'string' },
+                    audioFileId: { type: 'string' },
+                    mediaUrl: { type: 'string', format: 'uri' },
+                  },
+                  required: ['type'],
+                },
+                {
+                  type: 'object',
+                  properties: {
+                    type: { const: 'video' },
+                    videoUrl: { type: 'string', format: 'uri' },
+                    thumbnailUrl: { type: 'string', format: 'uri' },
+                    caption: { type: 'string' },
+                    videoFileId: { type: 'string' },
+                    mediaUrl: { type: 'string', format: 'uri' },
+                  },
+                  required: ['type'],
+                },
+              ],
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'newsUrl', 'userId', 'contentType', 'content', 'createdAt', 'updatedAt'],
+          example: {
+            id: 't_01HF3...',
+            newsUrl: 'https://www.bbc.com/hindi/articles/cp857188z40o',
+            userId: 'user123',
+            contentType: 'audio',
+            content: {
+              type: 'audio',
+              audioFileId: '66ff1c1e2f1a4d1f9e6b1234',
+              mediaUrl: '/api/v1/media/66ff1c1e2f1a4d1f9e6b1234/stream'
+            },
+            createdAt: '2025-11-04T06:12:00.000Z',
+            updatedAt: '2025-11-04T06:12:00.000Z',
+          },
+        },
+        CreateThoughtRequest: {
+          type: 'object',
+          required: ['newsUrl', 'userId', 'contentType', 'content'],
+          properties: {
+            newsUrl: { type: 'string', format: 'uri', description: 'News article URL from /news' },
+            userId: { type: 'string', description: 'Author user ID' },
+            contentType: { type: 'string', enum: ['text', 'audio', 'video'] },
+            content: { $ref: '#/components/schemas/Thought/properties/content' },
+          },
+          example: {
+            newsUrl: 'https://www.bbc.com/hindi/articles/cp857188z40o?at_medium=RSS&at_campaign=rss',
+            userId: 'user123',
+            contentType: 'text',
+            content: { type: 'text', text: 'My thought about this article' },
+          },
+        },
+        ThoughtsListResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Thought' },
+            },
+          },
+        },
+        ThoughtResponse: {
+          type: 'object',
+          properties: { data: { $ref: '#/components/schemas/Thought' } },
+        },
         NewsItem: {
           type: 'object',
           properties: {
