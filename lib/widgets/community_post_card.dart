@@ -8,18 +8,35 @@ class CommunityPostCard extends StatelessWidget {
     super.key,
     required this.userName,
     required this.text,
+    this.avatar,
+    this.imageUrls = const [],
+    this.videoThumbnailUrl,
     this.onPlay,
     this.isPlaying = false,
+    this.likes = 0,
+    this.comments = 0,
+    this.onLike,
+    this.onComment,
+    this.onShare,
   });
 
   final String userName;
   final String text; // empty string means voice-only
+  final ImageProvider<Object>? avatar;
+  final List<String> imageUrls;
+  final String? videoThumbnailUrl;
   final VoidCallback? onPlay;
   final bool isPlaying;
+  final int likes;
+  final int comments;
+  final VoidCallback? onLike;
+  final VoidCallback? onComment;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(Spacing.md),
         child: Column(
@@ -27,7 +44,11 @@ class CommunityPostCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const CircleAvatar(radius: 18, child: Icon(Icons.person)),
+                CircleAvatar(
+                  radius: 18,
+                  backgroundImage: avatar,
+                  child: avatar == null ? const Icon(Icons.person) : null,
+                ),
                 const SizedBox(width: Spacing.sm),
                 Expanded(
                   child: Text(
@@ -42,35 +63,36 @@ class CommunityPostCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: Spacing.sm),
-            _AudioRow(isPlaying: isPlaying, onPlay: onPlay),
             if (text.isNotEmpty) ...[
               const SizedBox(height: Spacing.sm),
-              Text(text, style: Theme.of(context).textTheme.bodyLarge),
+              Text(
+                text,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
             ],
+            if (imageUrls.isNotEmpty) ...[
+              const SizedBox(height: Spacing.sm),
+              _ImagesGrid(imageUrls: imageUrls),
+            ],
+            if (videoThumbnailUrl != null) ...[
+              const SizedBox(height: Spacing.sm),
+              _VideoThumb(thumbnailUrl: videoThumbnailUrl!, onPlay: onPlay),
+            ],
+            if (text.isEmpty && imageUrls.isEmpty && videoThumbnailUrl == null)
+              ...[
+                const SizedBox(height: Spacing.sm),
+                _AudioRow(isPlaying: isPlaying, onPlay: onPlay),
+              ],
             const SizedBox(height: Spacing.sm),
             const Divider(height: 1),
             const SizedBox(height: Spacing.sm),
-            Row(
-              children: [
-                Icon(Icons.star_border, color: AppColors.textMuted),
-                const SizedBox(width: 6),
-                Text(L10n.showRespect,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
-                        ?.copyWith(color: AppColors.textSecondary)),
-                const Spacer(),
-                const Icon(Icons.chat_bubble_outline_rounded,
-                    color: AppColors.textMuted),
-                const SizedBox(width: 6),
-                Text(L10n.thoughtsQ,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
-                        ?.copyWith(color: AppColors.textSecondary)),
-              ],
-            )
+            _ActionsRow(
+              likes: likes,
+              comments: comments,
+              onLike: onLike,
+              onComment: onComment,
+              onShare: onShare,
+            ),
           ],
         ),
       ),
@@ -112,6 +134,161 @@ class _AudioRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ImagesGrid extends StatelessWidget {
+  const _ImagesGrid({required this.imageUrls});
+
+  final List<String> imageUrls;
+
+  @override
+  Widget build(BuildContext context) {
+    final int count = imageUrls.length.clamp(1, 4);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        shrinkWrap: true,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        itemCount: count,
+        itemBuilder: (context, index) {
+          final String url = imageUrls[index];
+          final bool showOverlay = index == 3 && imageUrls.length > 4;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: AppColors.outline.withOpacity(0.2)),
+              Image.network(url, fit: BoxFit.cover,
+                  errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image))),
+              if (showOverlay)
+                Container(
+                  color: Colors.black45,
+                  alignment: Alignment.center,
+                  child: Text(
+                    '+${imageUrls.length - 3}',
+                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _VideoThumb extends StatelessWidget {
+  const _VideoThumb({required this.thumbnailUrl, this.onPlay});
+
+  final String thumbnailUrl;
+  final VoidCallback? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Image.network(
+              thumbnailUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (c, e, s) => Container(
+                color: AppColors.outline.withOpacity(0.2),
+                alignment: Alignment.center,
+                child: const Icon(Icons.videocam_off),
+              ),
+            ),
+          ),
+          Material(
+            color: Colors.black38,
+            shape: const CircleBorder(),
+            child: IconButton(
+              iconSize: 36,
+              color: Colors.white,
+              icon: const Icon(Icons.play_arrow_rounded),
+              onPressed: onPlay,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionsRow extends StatelessWidget {
+  const _ActionsRow({
+    required this.likes,
+    required this.comments,
+    this.onLike,
+    this.onComment,
+    this.onShare,
+  });
+
+  final int likes;
+  final int comments;
+  final VoidCallback? onLike;
+  final VoidCallback? onComment;
+  final VoidCallback? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _ActionButton(
+          icon: Icons.favorite_border,
+          label: likes.toString(),
+          onTap: onLike,
+        ),
+        const SizedBox(width: Spacing.lg),
+        _ActionButton(
+          icon: Icons.chat_bubble_outline_rounded,
+          label: comments.toString(),
+          onTap: onComment,
+        ),
+        const Spacer(),
+        _ActionButton(
+          icon: Icons.share_outlined,
+          label: null, // icon only to keep compact
+          onTap: onShare,
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.icon, this.label, this.onTap});
+
+  final IconData icon;
+  final String? label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.textMuted),
+            if (label != null) ...[
+              const SizedBox(width: 6),
+              Text(label!, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.textSecondary)),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

@@ -119,19 +119,7 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
             ],
           ),
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.only(bottom: 72),
-          child: Semantics(
-            button: true,
-            label: L10n.shareYourThoughts,
-            child: FloatingActionButton.extended(
-              onPressed: () => _announce(context, 'Record your thoughts'),
-              icon: const Icon(Icons.mic_rounded, size: 28),
-              label: Text(L10n.shareYourThoughts),
-            ),
-          ),
-        ),
+        // Share Your Thoughts FAB removed as requested
       ),
     );
   }

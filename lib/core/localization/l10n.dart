@@ -45,6 +45,12 @@ class L10n {
   static String get recordAudio => _s('recordAudio');
   static String get typeText => _s('typeText');
   static String get recordVideo => _s('recordVideo');
+  static String get thoughtsByViewers => _s('thoughtsByViewers');
+  static String get enterYourThought => _s('enterYourThought');
+  static String get submit => _s('submit');
+  static String get recording => _s('recording');
+  static String get stopRecording => _s('stopRecording');
+  static String get noThoughtsYet => _s('noThoughtsYet');
 
   // String tables (en, hi)
   static const Map<String, Map<String, String>> _strings = {
@@ -76,6 +82,12 @@ class L10n {
       'recordAudio': 'Record Audio',
       'typeText': 'Type Text',
       'recordVideo': 'Record Video',
+      'thoughtsByViewers': 'Thoughts By Viewers',
+      'enterYourThought': 'Enter your thought...',
+      'submit': 'Submit',
+      'recording': 'Recording...',
+      'stopRecording': 'Stop Recording',
+      'noThoughtsYet': 'No thoughts yet. Be the first to share!',
     },
     'hi': {
       'goodMorning': 'सुप्रभात!',
@@ -105,6 +117,12 @@ class L10n {
       'recordAudio': 'ऑडियो रिकॉर्ड करें',
       'typeText': 'टेक्स्ट टाइप करें',
       'recordVideo': 'वीडियो रिकॉर्ड करें',
+      'thoughtsByViewers': 'दर्शकों के विचार',
+      'enterYourThought': 'अपना विचार दर्ज करें...',
+      'submit': 'सबमिट करें',
+      'recording': 'रिकॉर्डिंग...',
+      'stopRecording': 'रिकॉर्डिंग रोकें',
+      'noThoughtsYet': 'अभी तक कोई विचार नहीं। पहले साझा करने वाले बनें!',
     },
   };
 }
