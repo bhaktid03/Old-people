@@ -1,30 +1,32 @@
-import express from 'express';
-import { connectMongo, getDb } from './config/mongo.js';
-import { logger } from './services/logger.js';
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import pino from "pino";
+import pinoHttp from "pino-http";
+import routes from "./routes/index.js";
 
-export async function buildApp() {
-  await connectMongo();
+const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 
+export function createApp() {
   const app = express();
-  app.use(express.json({ limit: '2mb' }));
+  app.use(helmet());
+  app.use(cors());
+  app.use(express.json({ limit: "1mb" }));
+  app.use(pinoHttp({ logger }));
 
-  app.get('/health', (_req, res) => {
-    res.json({ ok: true });
-  });
+  app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
-  app.get('/db/ping', async (_req, res) => {
-    try {
-      const db = getDb();
-      const ping = await db.command({ ping: 1 });
-      const collections = await db.collections();
-      res.json({ ok: true, ping, collections: collections.map(c => c.collectionName) });
-    } catch (err) {
-      logger.error({ err }, 'DB ping failed');
-      res.status(500).json({ ok: false, error: 'DB ping failed' });
-    }
+  app.use("/api/v1", routes);
+
+  // Error handler
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    logger.error({ err }, "unhandled_error");
+    res.status(err?.status || 500).json({ error: err?.message || "Internal Error" });
   });
 
   return app;
 }
 
+export default createApp;
 

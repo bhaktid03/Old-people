@@ -1,19 +1,29 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import dotenv from "dotenv";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
-}
-
-export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  port: Number(process.env.PORT || 4000),
-  mongoUri: requireEnv('MONGODB_URI'),
-  mongoDbName: process.env.MONGODB_DB || 'chaupal',
-  gridfsAudioBucket: process.env.GRIDFS_AUDIO_BUCKET || 'audio',
-  gridfsTtsBucket: process.env.GRIDFS_TTS_BUCKET || 'tts'
+export type Env = {
+  PORT: string | undefined;
+  MONGODB_URI: string;
+  DB_NAME: string;
 };
 
+export function loadEnv(): Env {
+  dotenv.config();
+
+  const {
+    PORT,
+    MONGODB_URI,
+    DB_NAME: DB_NAME_RAW,
+    MONGODB_DB,
+  } = process.env as Record<string, string>;
+
+  const DB_NAME = DB_NAME_RAW || MONGODB_DB;
+  if (!MONGODB_URI) throw new Error("MONGODB_URI is required");
+  if (!DB_NAME) throw new Error("DB_NAME is required");
+
+  return {
+    PORT,
+    MONGODB_URI,
+    DB_NAME,
+  };
+}
 
