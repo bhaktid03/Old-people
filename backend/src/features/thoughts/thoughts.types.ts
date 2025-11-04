@@ -11,6 +11,7 @@ export type ThoughtDoc = {
   userId: string;
   contentType: ThoughtType;
   content: ThoughtContent;
+  respectUserIds: string[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -28,6 +29,8 @@ export type ThoughtResponse = {
   userId: string;
   contentType: ThoughtType;
   content: ThoughtContent;
+  respectUserIds: string[];
+  respectCount: number;
   createdAt: string;
   updatedAt: string;
 };

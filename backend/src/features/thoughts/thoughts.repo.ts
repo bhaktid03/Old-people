@@ -12,6 +12,7 @@ export async function createThought(input: CreateThoughtInput): Promise<ThoughtD
     userId: input.userId,
     contentType: input.contentType,
     content: input.content,
+    respectUserIds: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -98,6 +99,32 @@ export async function attachMediaToThought(
   await db
     .collection<ThoughtDoc>("thoughts")
     .updateOne({ _id: thoughtId }, { $set: { [field]: fileId, updatedAt: now } });
+}
+
+export async function addRespect(thoughtId: string, userId: string): Promise<ThoughtDoc | null> {
+  const db = getDb();
+  const now = new Date();
+  const result = await db
+    .collection<ThoughtDoc>("thoughts")
+    .findOneAndUpdate(
+      { _id: thoughtId },
+      { $addToSet: { respectUserIds: userId }, $set: { updatedAt: now } },
+      { returnDocument: "after" }
+    );
+  return result ?? null;
+}
+
+export async function removeRespect(thoughtId: string, userId: string): Promise<ThoughtDoc | null> {
+  const db = getDb();
+  const now = new Date();
+  const result = await db
+    .collection<ThoughtDoc>("thoughts")
+    .findOneAndUpdate(
+      { _id: thoughtId },
+      { $pull: { respectUserIds: userId }, $set: { updatedAt: now } },
+      { returnDocument: "after" }
+    );
+  return result ?? null;
 }
 
 // Initialize indexes on collection

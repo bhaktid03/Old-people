@@ -39,6 +39,52 @@ const options: swaggerJsdoc.Options = {
           },
           required: ['_id', 'createdAt', 'updatedAt']
         },
+        CommunityAuthor: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            displayName: { type: 'string' },
+            imageUrl: { type: 'string', format: 'uri' },
+          },
+          required: ['userId']
+        },
+        CommunityPost: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            author: { $ref: '#/components/schemas/CommunityAuthor' },
+            text: { type: 'string' },
+            media: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['image','video','audio'] },
+                  url: { type: 'string', format: 'uri' },
+                  mimeType: { type: 'string' }
+                },
+                required: ['type','url']
+              }
+            },
+            likeUserIds: { type: 'array', items: { type: 'string' } },
+            commentsCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id','author','createdAt','updatedAt']
+        },
+        CommunityComment: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            postId: { type: 'string' },
+            author: { $ref: '#/components/schemas/CommunityAuthor' },
+            text: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id','postId','author','text','createdAt','updatedAt']
+        },
         Conversation: {
           type: 'object',
           properties: {
@@ -144,10 +190,12 @@ const options: swaggerJsdoc.Options = {
                 },
               ],
             },
+            respectUserIds: { type: 'array', items: { type: 'string' }, description: 'Users who respected this thought' },
+            respectCount: { type: 'integer', description: 'Total respects for this thought' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
-          required: ['id', 'newsUrl', 'userId', 'contentType', 'content', 'createdAt', 'updatedAt'],
+          required: ['id', 'newsUrl', 'userId', 'contentType', 'content', 'respectUserIds', 'respectCount', 'createdAt', 'updatedAt'],
           example: {
             id: 't_01HF3...',
             newsUrl: 'https://www.bbc.com/hindi/articles/cp857188z40o',
@@ -158,6 +206,8 @@ const options: swaggerJsdoc.Options = {
               audioFileId: '66ff1c1e2f1a4d1f9e6b1234',
               mediaUrl: '/api/v1/media/66ff1c1e2f1a4d1f9e6b1234/stream'
             },
+            respectUserIds: ['+911234567890'],
+            respectCount: 1,
             createdAt: '2025-11-04T06:12:00.000Z',
             updatedAt: '2025-11-04T06:12:00.000Z',
           },

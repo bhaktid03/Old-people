@@ -5,6 +5,8 @@ import {
   handleGetThoughts,
   handleDeleteThought,
   handleUpdateThought,
+  handleRespectThought,
+  handleUnrespectThought,
 } from "./thoughts.controller.js";
 
 const router = Router();
@@ -23,6 +25,12 @@ router.put("/:id", handleUpdateThought);
 
 // DELETE /api/v1/thoughts/:id - Delete a thought
 router.delete("/:id", handleDeleteThought);
+
+// POST /api/v1/thoughts/:id/respect - Respect a thought
+router.post("/:id/respect", handleRespectThought);
+
+// DELETE /api/v1/thoughts/:id/respect - Remove respect
+router.delete("/:id/respect", handleUnrespectThought);
 
 export default router;
 

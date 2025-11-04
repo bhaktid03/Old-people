@@ -5,6 +5,8 @@ import {
   getThoughts,
   deleteThought as serviceDeleteThought,
   updateThought as serviceUpdateThought,
+  respectThought as serviceRespectThought,
+  unrespectThought as serviceUnrespectThought,
 } from "./thoughts.service.js";
 import { ThoughtType, ThoughtContent } from "./thoughts.types.js";
 
@@ -345,5 +347,83 @@ export async function handleUpdateThought(req: Request, res: Response) {
   } catch (error: any) {
     return res.status(400).json({ error: error.message || "Failed to update thought" });
   }
+}
+
+/**
+ * @swagger
+ * /api/v1/thoughts/{id}/respect:
+ *   post:
+ *     summary: Add respect (like) to a thought
+ *     tags:
+ *       - Thoughts
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Respect added
+ *       404:
+ *         description: Thought not found
+ */
+export async function handleRespectThought(req: Request, res: Response) {
+  const { id } = req.params;
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId is required" });
+  const thought = await serviceRespectThought(id, String(userId));
+  if (!thought) return res.status(404).json({ error: "Thought not found" });
+  return res.json({ data: thought });
+}
+
+/**
+ * @swagger
+ * /api/v1/thoughts/{id}/respect:
+ *   delete:
+ *     summary: Remove respect (unlike) from a thought
+ *     tags:
+ *       - Thoughts
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Respect removed
+ *       404:
+ *         description: Thought not found
+ */
+export async function handleUnrespectThought(req: Request, res: Response) {
+  const { id } = req.params;
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId is required" });
+  const thought = await serviceUnrespectThought(id, String(userId));
+  if (!thought) return res.status(404).json({ error: "Thought not found" });
+  return res.json({ data: thought });
 }
 

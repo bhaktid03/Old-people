@@ -28,6 +28,8 @@ function toResponse(doc: ThoughtDoc): ThoughtResponse {
     userId: doc.userId,
     contentType: doc.contentType,
     content,
+    respectUserIds: doc.respectUserIds ?? [],
+    respectCount: (doc.respectUserIds ?? []).length,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -91,6 +93,18 @@ export async function updateThought(
   updates: { content?: ThoughtDoc["content"] }
 ): Promise<ThoughtResponse | null> {
   const doc = await repoUpdateThought(thoughtId, userId, updates);
+  return doc ? toResponse(doc) : null;
+}
+
+export async function respectThought(thoughtId: string, userId: string): Promise<ThoughtResponse | null> {
+  const { addRespect } = await import("./thoughts.repo.js");
+  const doc = await addRespect(thoughtId, userId);
+  return doc ? toResponse(doc) : null;
+}
+
+export async function unrespectThought(thoughtId: string, userId: string): Promise<ThoughtResponse | null> {
+  const { removeRespect } = await import("./thoughts.repo.js");
+  const doc = await removeRespect(thoughtId, userId);
   return doc ? toResponse(doc) : null;
 }
 
