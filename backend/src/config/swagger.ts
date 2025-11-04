@@ -27,6 +27,30 @@ const options: swaggerJsdoc.Options = {
     ],
     components: {
       schemas: {
+        User: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            phone: { type: 'string' },
+            email: { type: 'string', format: 'email' },
+            displayName: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id', 'createdAt', 'updatedAt']
+        },
+        Profile: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string', description: 'User ID (phone in E.164)' },
+            displayName: { type: 'string' },
+            imageUrl: { type: 'string', format: 'uri', description: 'HTTPS image URL' },
+            language: { type: 'string', description: 'ISO 639-1 code' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id', 'createdAt', 'updatedAt']
+        },
         NewsItem: {
           type: 'object',
           properties: {
@@ -126,6 +150,18 @@ const options: swaggerJsdoc.Options = {
               description: 'OTP code received via SMS',
               example: '123456',
             },
+            displayName: {
+              type: 'string',
+              description: 'User\'s display name (used when creating first-time user)',
+              example: 'Grandpa Ram',
+            },
+          },
+        },
+        LoginResponse: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean', example: true },
+            user: { $ref: '#/components/schemas/User' },
           },
         },
         HealthCheckResponse: {

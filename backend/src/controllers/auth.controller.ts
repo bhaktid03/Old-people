@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { sendOtp, verifyOtp } from '../services/otp.service.js';
+import { getUserById, createUser } from '../features/users/user.repo.js';
+import { logger } from '../services/logger.js';
 
 function normalizePhone(phone: string): string {
   // Expecting E.164 e.g. +919876543210; basic normalization fallback
@@ -48,8 +50,10 @@ export async function sendOtpHandler(req: Request, res: Response) {
   try {
     const phone = normalizePhone(String(req.body.phone || ''));
     await sendOtp(phone);
+    logger.info({ phone }, 'otp_sent');
     res.json({ ok: true });
   } catch (err: any) {
+    logger.warn({ err: err?.message, phone: req?.body?.phone }, 'otp_send_failed');
     res.status(400).json({ ok: false, error: err.message || 'Failed to send OTP' });
   }
 }
@@ -71,13 +75,14 @@ export async function sendOtpHandler(req: Request, res: Response) {
  *           example:
  *             phone: "+919876543210"
  *             code: "123456"
+ *             displayName: "Grandpa Ram"
  *     responses:
  *       200:
- *         description: OTP verified successfully
+ *         description: OTP verified successfully. Returns the user document.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
+ *               $ref: '#/components/schemas/LoginResponse'
  *       400:
  *         description: Bad request - Invalid or expired code, or missing required fields
  *         content:
@@ -97,10 +102,26 @@ export async function verifyOtpHandler(req: Request, res: Response) {
     const code = String(req.body.code || '').trim();
     if (!code) throw new Error('Code is required');
     const ok = await verifyOtp(phone, code);
-    if (!ok) return res.status(400).json({ ok: false, error: 'Invalid or expired code' });
-    // TODO: issue your JWT here; for now just success flag
-    res.json({ ok: true });
+    if (!ok) {
+      logger.warn({ phone }, 'otp_verify_failed');
+      return res.status(400).json({ ok: false, error: 'Invalid or expired code' });
+    }
+
+    // Use phone number as the user ID for simplicity and uniqueness
+    const userId = phone;
+    let user = await getUserById(userId);
+    if (!user) {
+      const displayName = req.body?.displayName ? String(req.body.displayName).trim() : undefined;
+      user = await createUser({ _id: userId, phone: phone, displayName } as any);
+      logger.info({ userId, phone }, 'user_created_on_verify');
+    } else {
+      logger.info({ userId, phone }, 'user_login_success');
+    }
+
+    // For now we return the user document; token issuance can be added later
+    res.json({ ok: true, user });
   } catch (err: any) {
+    logger.error({ err: err?.message, phone: req?.body?.phone }, 'otp_verify_error');
     res.status(400).json({ ok: false, error: err.message || 'Verification failed' });
   }
 }
