@@ -3,6 +3,7 @@ import '../widgets/bottom_nav.dart';
 import '../features/headlines/presentation/news_home_screen.dart';
 import '../features/community/presentation/community_wall_screen.dart';
 import '../features/chat/presentation/chat_list_screen.dart';
+import '../features/profile/presentation/profile_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -18,7 +19,7 @@ class _HomeShellState extends State<HomeShell> {
     const NewsHomeScreen(),
     const CommunityWallScreen(),
     const ChatListScreen(),
-    const _ProfilePlaceholder(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -29,17 +30,6 @@ class _HomeShellState extends State<HomeShell> {
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
       ),
-    );
-  }
-}
-
-class _ProfilePlaceholder extends StatelessWidget {
-  const _ProfilePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('Profile')),
     );
   }
 }
