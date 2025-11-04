@@ -1,0 +1,24 @@
+# for langchain 
+langchain 
+# for langsmith integration
+langsmith
+# for langchain community
+langchain-community
+# for langchain openai
+langchain-openai
+# for langchain community
+langchain-community
+# for langchain google gemini
+langchain-community
+langchain-google-genai
+
+#for the web server
+fastapi
+uvicorn
+# for reading the environment variable
+python-dotenv
+# for the multipart/form-data
+python-multipart
+# for the dateutil
+python-dateutil
+
