@@ -9,6 +9,7 @@ class ViewerThought {
     this.videoUrl,
     this.localFilePath,
     this.remoteFileId,
+    this.mediaUrl,
     this.duration,
     this.status = ThoughtStatus.pending,
     this.llmReply,
@@ -23,21 +24,31 @@ class ViewerThought {
   final String? videoUrl;
   final String? localFilePath; // local device path for playback before upload
   final String? remoteFileId; // backend fileId (GridFS)
+  final String? mediaUrl; // URL to stream media from server
   final Duration? duration;
   final ThoughtStatus status; // pending, uploaded, approved, flagged
   final String? llmReply;
   final DateTime createdAt;
 
   factory ViewerThought.fromJson(Map<String, dynamic> json) {
+    // Extract content if it exists (for API responses)
+    final content = json['content'] as Map<String, dynamic>?;
+    final mediaUrl = content?['mediaUrl'] as String?;
+    
+    // Determine type from contentType or type field
+    final contentType = json['contentType'] as String?;
+    final typeStr = contentType ?? json['type'] as String? ?? 'text';
+    
     return ViewerThought(
       id: json['_id']?.toString() ?? json['id'].toString(),
       userName: json['userName'] as String? ?? 'Anonymous',
-      type: ThoughtType.fromString(json['type'] as String? ?? 'text'),
-      text: json['text'] as String?,
+      type: ThoughtType.fromString(typeStr),
+      text: json['text'] as String? ?? content?['text'] as String?,
       audioUrl: json['audioUrl'] as String?,
       videoUrl: json['videoUrl'] as String?,
       localFilePath: json['localFilePath'] as String?,
-      remoteFileId: json['remoteFileId'] as String?,
+      remoteFileId: json['remoteFileId'] as String? ?? content?['audioFileId'] as String? ?? content?['videoFileId'] as String?,
+      mediaUrl: mediaUrl,
       duration: json['durationMs'] != null
           ? Duration(milliseconds: json['durationMs'] as int)
           : null,
@@ -58,6 +69,7 @@ class ViewerThought {
         'videoUrl': videoUrl,
         'localFilePath': localFilePath,
         'remoteFileId': remoteFileId,
+        'mediaUrl': mediaUrl,
         'durationMs': duration?.inMilliseconds,
         'status': status.toString(),
         'llmReply': llmReply,

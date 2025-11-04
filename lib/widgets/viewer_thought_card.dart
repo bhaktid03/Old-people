@@ -85,11 +85,25 @@ class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
                 Text(widget.thought.llmReply!, style: Theme.of(context).textTheme.bodyLarge),
               ],
             ] else if (widget.thought.type == ThoughtType.video) ...[
-              if (widget.thought.videoUrl != null) ...[
-                _ThoughtVideoPlayer(videoPath: widget.thought.videoUrl!),
-              ] else ...[
-                _VideoPlayer(onPlay: widget.onPlay),
-              ],
+              // Use mediaUrl (server stream) if available, otherwise use videoUrl or localFilePath
+              Builder(
+                builder: (context) {
+                  String? videoPath;
+                  if (widget.thought.mediaUrl != null && widget.thought.mediaUrl!.isNotEmpty) {
+                    videoPath = widget.thought.mediaUrl;
+                  } else if (widget.thought.videoUrl != null && widget.thought.videoUrl!.isNotEmpty) {
+                    videoPath = widget.thought.videoUrl;
+                  } else if (widget.thought.localFilePath != null && widget.thought.localFilePath!.isNotEmpty) {
+                    videoPath = widget.thought.localFilePath;
+                  }
+                  
+                  if (videoPath != null && videoPath.isNotEmpty) {
+                    return _ThoughtVideoPlayer(videoPath: videoPath);
+                  } else {
+                    return _VideoPlayer(onPlay: widget.onPlay);
+                  }
+                },
+              ),
               if (widget.thought.text != null && widget.thought.text!.isNotEmpty) ...[
                 const SizedBox(height: Spacing.sm),
                 Text(
@@ -240,16 +254,33 @@ class _ThoughtVideoPlayerState extends State<_ThoughtVideoPlayer> {
 
   Future<void> _initController() async {
     try {
-      final file = File(widget.videoPath);
-      final controller = VideoPlayerController.file(file);
+      print('[VideoPlayer] Initializing with path: ${widget.videoPath}');
+      VideoPlayerController controller;
+      
+      // Check if it's a URL (starts with http:// or https://) or a local file path
+      if (widget.videoPath.startsWith('http://') || widget.videoPath.startsWith('https://')) {
+        // Use network for streaming from HTTP/HTTPS URLs
+        print('[VideoPlayer] Using networkUrl for streaming: ${widget.videoPath}');
+        controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoPath));
+      } else {
+        // Use file for local files
+        print('[VideoPlayer] Using file controller for local file: ${widget.videoPath}');
+        final file = File(widget.videoPath);
+        controller = VideoPlayerController.file(file);
+      }
+      
       _controller = controller;
+      print('[VideoPlayer] Initializing controller...');
       await controller.initialize();
       controller.setLooping(false);
+      print('[VideoPlayer] Controller initialized successfully');
       if (!mounted) return;
       setState(() {
         _isInitializing = false;
       });
-    } catch (_) {
+    } catch (e, stackTrace) {
+      print('[VideoPlayer] Error initializing video player: $e');
+      print('[VideoPlayer] Stack trace: $stackTrace');
       if (!mounted) return;
       setState(() {
         _hasError = true;
