@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../core/localization/l10n.dart';
 import '../../../widgets/share_thoughts_modal.dart';
+import '../../../widgets/text_input_screen.dart';
+import '../../../widgets/audio_recording_screen.dart';
+import '../data/viewer_thought_model.dart';
+import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
 
 class NewsDetailScreen extends StatefulWidget {
@@ -16,6 +20,7 @@ class NewsDetailScreen extends StatefulWidget {
 class _NewsDetailScreenState extends State<NewsDetailScreen> {
   double _textScale = 1.0;
   double _baseScale = 1.0;
+  final List<ViewerThought> _thoughts = <ViewerThought>[];
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +97,30 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               '${widget.headline.summary}\n\n${widget.headline.summary}\n\n${widget.headline.summary}',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: 80),
+            const SizedBox(height: 24),
+            // Thoughts By Viewers section
+            Text(
+              L10n.thoughtsByViewers,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: Spacing.sm),
+            if (_thoughts.isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Spacing.md),
+                child: Text(
+                  L10n.noThoughtsYet,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium,
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: Spacing.xs),
+              ..._thoughts
+                  .map((t) => ViewerThoughtCard(thought: t))
+                  .toList(),
+              const SizedBox(height: 80),
+            ],
           ],
         ),
       ),
@@ -115,16 +143,47 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     if (result != null) {
       switch (result) {
         case 'record_audio':
-          _announce(context, 'Recording audio...');
-          // TODO: Implement audio recording
+          final audioResult = await Navigator.of(context).push<String>(
+            MaterialPageRoute(builder: (_) => const AudioRecordingScreen()),
+          );
+          if (audioResult != null && mounted) {
+            setState(() {
+              _thoughts.insert(
+                0,
+                ViewerThought(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  userName: 'You',
+                  type: ThoughtType.audio,
+                  audioUrl: audioResult,
+                  createdAt: DateTime.now(),
+                ),
+              );
+            });
+            _announce(context, 'Audio thought added');
+          }
           break;
         case 'type_text':
-          _announce(context, 'Opening text input...');
-          // TODO: Implement text input screen
+          final text = await Navigator.of(context).push<String>(
+            MaterialPageRoute(builder: (_) => const TextInputScreen()),
+          );
+          if (text != null && text.trim().isNotEmpty && mounted) {
+            setState(() {
+              _thoughts.insert(
+                0,
+                ViewerThought(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  userName: 'You',
+                  type: ThoughtType.text,
+                  text: text.trim(),
+                  createdAt: DateTime.now(),
+                ),
+              );
+            });
+            _announce(context, 'Thought posted');
+          }
           break;
         case 'record_video':
-          _announce(context, 'Recording video...');
-          // TODO: Implement video recording
+          _announce(context, 'Video recording not implemented yet');
           break;
       }
     }

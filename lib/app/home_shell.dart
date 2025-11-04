@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/bottom_nav.dart';
 import '../features/headlines/presentation/news_home_screen.dart';
 import '../features/community/presentation/community_wall_screen.dart';
+import '../features/chat/presentation/chat_list_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -13,11 +14,11 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  final List<Widget> _pages = const [
-    NewsHomeScreen(),
-    CommunityWallScreen(),
-    _ChatsPlaceholder(),
-    _ProfilePlaceholder(),
+  final List<Widget> _pages = [
+    const NewsHomeScreen(),
+    const CommunityWallScreen(),
+    const ChatListScreen(),
+    const _ProfilePlaceholder(),
   ];
 
   @override
@@ -28,17 +29,6 @@ class _HomeShellState extends State<HomeShell> {
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
       ),
-    );
-  }
-}
-
-class _ChatsPlaceholder extends StatelessWidget {
-  const _ChatsPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('Chats')),
     );
   }
 }
