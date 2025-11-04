@@ -4,6 +4,7 @@ import '../../../core/localization/l10n.dart';
 import '../../../widgets/share_thoughts_modal.dart';
 import '../../../widgets/text_input_screen.dart';
 import '../../../widgets/audio_recording_screen.dart';
+import '../../../widgets/video_recording_screen.dart';
 import '../data/viewer_thought_model.dart';
 import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
@@ -243,7 +244,24 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           }
           break;
         case 'record_video':
-          _announce(context, 'Video recording not implemented yet');
+          final videoPath = await Navigator.of(context).push<String>(
+            MaterialPageRoute(builder: (_) => const VideoRecordingScreen()),
+          );
+          if (videoPath != null && mounted) {
+            setState(() {
+              _thoughts.insert(
+                0,
+                ViewerThought(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  userName: 'You',
+                  type: ThoughtType.video,
+                  videoUrl: videoPath,
+                  createdAt: DateTime.now(),
+                ),
+              );
+            });
+            _announce(context, 'Video added');
+          }
           break;
       }
     }

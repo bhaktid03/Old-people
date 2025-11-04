@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../app/theme/colors.dart';
 import '../app/theme/spacing.dart';
 import '../core/localization/l10n.dart';
@@ -10,7 +13,7 @@ class CommunityPostCard extends StatelessWidget {
     required this.text,
     this.avatar,
     this.imageUrls = const [],
-    this.videoThumbnailUrl,
+    this.videoPath,
     this.onPlay,
     this.isPlaying = false,
     this.likes = 0,
@@ -24,7 +27,7 @@ class CommunityPostCard extends StatelessWidget {
   final String text; // empty string means voice-only
   final ImageProvider<Object>? avatar;
   final List<String> imageUrls;
-  final String? videoThumbnailUrl;
+  final String? videoPath;
   final VoidCallback? onPlay;
   final bool isPlaying;
   final int likes;
@@ -74,11 +77,11 @@ class CommunityPostCard extends StatelessWidget {
               const SizedBox(height: Spacing.sm),
               _ImagesGrid(imageUrls: imageUrls),
             ],
-            if (videoThumbnailUrl != null) ...[
+            if (videoPath != null) ...[
               const SizedBox(height: Spacing.sm),
-              _VideoThumb(thumbnailUrl: videoThumbnailUrl!, onPlay: onPlay),
+              _PostVideoPlayer(videoPath: videoPath!),
             ],
-            if (text.isEmpty && imageUrls.isEmpty && videoThumbnailUrl == null)
+            if (text.isEmpty && imageUrls.isEmpty && videoPath == null)
               ...[
                 const SizedBox(height: Spacing.sm),
                 _AudioRow(isPlaying: isPlaying, onPlay: onPlay),
@@ -183,39 +186,126 @@ class _ImagesGrid extends StatelessWidget {
   }
 }
 
-class _VideoThumb extends StatelessWidget {
-  const _VideoThumb({required this.thumbnailUrl, this.onPlay});
+class _PostVideoPlayer extends StatefulWidget {
+  const _PostVideoPlayer({required this.videoPath});
 
-  final String thumbnailUrl;
-  final VoidCallback? onPlay;
+  final String videoPath;
+
+  @override
+  State<_PostVideoPlayer> createState() => _PostVideoPlayerState();
+}
+
+class _PostVideoPlayerState extends State<_PostVideoPlayer> {
+  VideoPlayerController? _controller;
+  bool _isInitializing = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final controller = VideoPlayerController.file(File(widget.videoPath));
+      _controller = controller;
+      await controller.initialize();
+      controller.setLooping(false);
+      if (!mounted) return;
+      setState(() {
+        _isInitializing = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _isInitializing = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    final c = _controller;
+    if (c == null) return;
+    if (c.value.isPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_hasError) {
+      return Container(
+        height: 200,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.outline.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.outline),
+        ),
+        child: Text('Failed to load video', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.error)),
+      );
+    }
+    if (_isInitializing || _controller == null) {
+      return Container(
+        height: 200,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.outline.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.outline),
+        ),
+        child: const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    final aspect = _controller!.value.aspectRatio == 0 ? 16 / 9 : _controller!.value.aspectRatio;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Stack(
         alignment: Alignment.center,
         children: [
           AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Image.network(
-              thumbnailUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (c, e, s) => Container(
-                color: AppColors.outline.withOpacity(0.2),
-                alignment: Alignment.center,
-                child: const Icon(Icons.videocam_off),
+            aspectRatio: aspect,
+            child: VideoPlayer(_controller!),
+          ),
+          Positioned(
+            bottom: 8,
+            left: 8,
+            right: 8,
+            child: VideoProgressIndicator(
+              _controller!,
+              allowScrubbing: true,
+              colors: VideoProgressColors(
+                playedColor: AppColors.brand,
+                bufferedColor: AppColors.outline,
+                backgroundColor: Colors.black26,
               ),
             ),
           ),
           Material(
-            color: Colors.black38,
-            shape: const CircleBorder(),
-            child: IconButton(
-              iconSize: 36,
-              color: Colors.white,
-              icon: const Icon(Icons.play_arrow_rounded),
-              onPressed: onPlay,
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _toggle,
+              child: Container(
+                color: Colors.transparent,
+                height: 200,
+                alignment: Alignment.center,
+                child: Icon(
+                  _controller!.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                  size: 56,
+                  color: Colors.white.withOpacity(0.85),
+                ),
+              ),
             ),
           ),
         ],

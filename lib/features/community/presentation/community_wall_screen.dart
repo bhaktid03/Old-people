@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../widgets/video_recording_screen.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../app/theme/colors.dart';
 import '../../../core/localization/l10n.dart';
@@ -29,7 +30,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
     _Post(
       userName: 'Ramesh',
       text: 'Sharing my favorite old song as a video memory 💿',
-      videoThumbnailUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4',
+      videoPath: null,
       likes: 23,
       comments: 7,
       createdAt: DateTime.now().subtract(const Duration(hours: 5)),
@@ -59,7 +60,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
       ),
       builder: (context) {
         return _ComposerSheet(
-          onSubmit: (text, images, videoThumb) {
+          onSubmit: (text, images, videoPath) {
             Navigator.of(context).pop();
             setState(() {
               _posts.insert(
@@ -68,7 +69,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                   userName: 'You',
                   text: text,
                   imageUrls: images,
-                  videoThumbnailUrl: videoThumb,
+                  videoPath: videoPath,
                   likes: 0,
                   comments: 0,
                   createdAt: DateTime.now(),
@@ -130,7 +131,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                   userName: p.userName,
                   text: p.text,
                   imageUrls: p.imageUrls,
-                  videoThumbnailUrl: p.videoThumbnailUrl,
+                  videoPath: p.videoPath,
                   likes: p.likes,
                   comments: p.comments,
                 ),
@@ -248,7 +249,7 @@ class _InlineComposer extends StatelessWidget {
 class _ComposerSheet extends StatefulWidget {
   const _ComposerSheet({required this.onSubmit});
 
-  final void Function(String text, List<String> imageUrls, String? videoThumb) onSubmit;
+  final void Function(String text, List<String> imageUrls, String? videoPath) onSubmit;
 
   @override
   State<_ComposerSheet> createState() => _ComposerSheetState();
@@ -257,7 +258,7 @@ class _ComposerSheet extends StatefulWidget {
 class _ComposerSheetState extends State<_ComposerSheet> {
   final TextEditingController _controller = TextEditingController();
   final List<String> _images = <String>[];
-  String? _videoThumb;
+  String? _videoPath;
 
   @override
   Widget build(BuildContext context) {
@@ -308,9 +309,9 @@ class _ComposerSheetState extends State<_ComposerSheet> {
                   ),
                 ],
               ),
-              if (_images.isNotEmpty || _videoThumb != null) ...[
+              if (_images.isNotEmpty || _videoPath != null) ...[
                 const SizedBox(height: Spacing.md),
-                _PreviewMedia(images: _images, videoThumb: _videoThumb),
+                _PreviewMedia(images: _images, videoPath: _videoPath),
               ],
               const SizedBox(height: Spacing.md),
               Wrap(
@@ -330,10 +331,15 @@ class _ComposerSheetState extends State<_ComposerSheet> {
                   _ChipButton(
                     icon: Icons.videocam_outlined,
                     label: 'Video',
-                    onTap: () {
-                      setState(() {
-                        _videoThumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475';
-                      });
+                    onTap: () async {
+                      final path = await Navigator.of(context).push<String>(
+                        MaterialPageRoute(builder: (_) => const VideoRecordingScreen()),
+                      );
+                      if (path != null && mounted) {
+                        setState(() {
+                          _videoPath = path;
+                        });
+                      }
                     },
                   ),
                   TextButton(
@@ -342,7 +348,7 @@ class _ComposerSheetState extends State<_ComposerSheet> {
                   ),
                   ElevatedButton(
                     onPressed: () {
-                      widget.onSubmit(_controller.text.trim(), List<String>.from(_images), _videoThumb);
+                      widget.onSubmit(_controller.text.trim(), List<String>.from(_images), _videoPath);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.brand,
@@ -392,10 +398,10 @@ class _ChipButton extends StatelessWidget {
 }
 
 class _PreviewMedia extends StatelessWidget {
-  const _PreviewMedia({required this.images, required this.videoThumb});
+  const _PreviewMedia({required this.images, required this.videoPath});
 
   final List<String> images;
-  final String? videoThumb;
+  final String? videoPath;
 
   @override
   Widget build(BuildContext context) {
@@ -421,29 +427,22 @@ class _PreviewMedia extends StatelessWidget {
                 ),
             ],
           ),
-        if (videoThumb != null) ...[
+        if (videoPath != null) ...[
           const SizedBox(height: Spacing.sm),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.network(
-                  videoThumb!,
-                  width: double.infinity,
-                  height: 140,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Container(
-                    height: 140,
-                    color: AppColors.outline.withOpacity(0.2),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.videocam_off),
-                  ),
-                ),
-                const CircleAvatar(
-                  backgroundColor: Colors.black38,
-                  child: Icon(Icons.play_arrow_rounded, color: Colors.white),
-                ),
+          Container(
+            height: 140,
+            decoration: BoxDecoration(
+              color: AppColors.outline.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.outline),
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.videocam_rounded),
+                SizedBox(width: 8),
+                Text('Video attached'),
               ],
             ),
           ),
@@ -458,7 +457,7 @@ class _Post {
     required this.userName,
     required this.text,
     this.imageUrls = const [],
-    this.videoThumbnailUrl,
+    this.videoPath,
     required this.likes,
     required this.comments,
     required this.createdAt,
@@ -467,7 +466,7 @@ class _Post {
   final String userName;
   final String text;
   final List<String> imageUrls;
-  final String? videoThumbnailUrl;
+  final String? videoPath;
   final int likes;
   final int comments;
   final DateTime createdAt;

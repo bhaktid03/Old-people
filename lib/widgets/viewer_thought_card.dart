@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../app/theme/colors.dart';
 import '../app/theme/spacing.dart';
 import '../core/localization/l10n.dart';
@@ -82,7 +85,11 @@ class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
                 Text(widget.thought.llmReply!, style: Theme.of(context).textTheme.bodyLarge),
               ],
             ] else if (widget.thought.type == ThoughtType.video) ...[
-              _VideoPlayer(onPlay: widget.onPlay),
+              if (widget.thought.videoUrl != null) ...[
+                _ThoughtVideoPlayer(videoPath: widget.thought.videoUrl!),
+              ] else ...[
+                _VideoPlayer(onPlay: widget.onPlay),
+              ],
               if (widget.thought.text != null && widget.thought.text!.isNotEmpty) ...[
                 const SizedBox(height: Spacing.sm),
                 Text(
@@ -171,42 +178,150 @@ class _AudioRow extends StatelessWidget {
   }
 }
 
-class _VideoPlayer extends StatelessWidget {
-  const _VideoPlayer({this.onPlay});
+class _ThoughtVideoPlayer extends StatefulWidget {
+  const _ThoughtVideoPlayer({required this.videoPath});
 
-  final VoidCallback? onPlay;
+  final String videoPath;
+
+  @override
+  State<_ThoughtVideoPlayer> createState() => _ThoughtVideoPlayerState();
+}
+
+class _ThoughtVideoPlayerState extends State<_ThoughtVideoPlayer> {
+  VideoPlayerController? _controller;
+  bool _isInitializing = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initController();
+  }
+
+  Future<void> _initController() async {
+    try {
+      final file = File(widget.videoPath);
+      final controller = VideoPlayerController.file(file);
+      _controller = controller;
+      await controller.initialize();
+      controller.setLooping(false);
+      if (!mounted) return;
+      setState(() {
+        _isInitializing = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _isInitializing = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    final c = _controller;
+    if (c == null) return;
+    if (c.value.isPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.outline),
-      ),
-      child: Stack(
+    if (_hasError) {
+      return Container(
+        height: 200,
         alignment: Alignment.center,
-        children: [
-          const Icon(
-            Icons.videocam_rounded,
-            size: 48,
-            color: AppColors.textMuted,
-          ),
-          Positioned(
-            bottom: Spacing.md,
-            child: ElevatedButton.icon(
-              onPressed: onPlay,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brand,
-                foregroundColor: Colors.white,
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.outline),
+        ),
+        child: Text(
+          'Failed to load video',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.error),
+        ),
+      );
+    }
+
+    if (_isInitializing || _controller == null) {
+      return Container(
+        height: 200,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.outline),
+        ),
+        child: const SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    final aspect = _controller!.value.aspectRatio == 0
+        ? 16 / 9
+        : _controller!.value.aspectRatio;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AspectRatio(
+                aspectRatio: aspect,
+                child: VideoPlayer(_controller!),
               ),
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: Text(L10n.play),
-            ),
+              Positioned(
+                bottom: 8,
+                left: 8,
+                right: 8,
+                child: VideoProgressIndicator(
+                  _controller!,
+                  allowScrubbing: true,
+                  colors: VideoProgressColors(
+                    playedColor: AppColors.brand,
+                    bufferedColor: AppColors.outline,
+                    backgroundColor: Colors.black26,
+                  ),
+                ),
+              ),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _togglePlay,
+                  child: Container(
+                    color: Colors.transparent,
+                    height: 200,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      _controller!.value.isPlaying
+                          ? Icons.pause_circle_filled_rounded
+                          : Icons.play_circle_fill_rounded,
+                      size: 56,
+                      color: Colors.white.withOpacity(0.85),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
