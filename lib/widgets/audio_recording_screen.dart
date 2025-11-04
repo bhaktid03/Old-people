@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../app/theme/colors.dart';
 import '../app/theme/spacing.dart';
 import '../core/localization/l10n.dart';
+import '../services/audio_recorder.dart';
+import 'dart:async';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class AudioRecordingScreen extends StatefulWidget {
   const AudioRecordingScreen({super.key});
@@ -13,6 +16,11 @@ class AudioRecordingScreen extends StatefulWidget {
 class _AudioRecordingScreenState extends State<AudioRecordingScreen> {
   bool _isRecording = false;
   Duration _duration = Duration.zero;
+  final AudioRecorderService _recorder = AudioRecorderService();
+  Timer? _timer;
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  String _transcript = '';
+  String? _speechLocaleId;
 
   @override
   void initState() {
@@ -20,26 +28,74 @@ class _AudioRecordingScreenState extends State<AudioRecordingScreen> {
     _startRecording();
   }
 
-  void _startRecording() {
-    setState(() {
-      _isRecording = true;
-      _duration = Duration.zero;
-    });
-    // TODO: Start actual audio recording
+  Future<void> _startRecording() async {
+    try {
+      // Pick locale based on current app language
+      final lang = L10n.locale.value; // 'en' or 'hi'
+      _speechLocaleId = lang == 'hi' ? 'hi-IN' : 'en-IN';
+
+      await _recorder.start();
+      // Start on-device speech recognition (best-effort)
+      final hasSpeech = await _speech.initialize(
+        onStatus: (s) {},
+        onError: (e) {},
+      );
+      if (hasSpeech) {
+        await _speech.listen(
+          localeId: _speechLocaleId,
+          listenMode: stt.ListenMode.dictation,
+          partialResults: true,
+          onResult: (res) {
+          if (!mounted) return;
+          setState(() {
+            _transcript = res.recognizedWords;
+          });
+          },
+        );
+      }
+      setState(() {
+        _isRecording = true;
+        _duration = Duration.zero;
+      });
+      _timer?.cancel();
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        setState(() {
+          _duration = Duration(seconds: _duration.inSeconds + 1);
+        });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Recording failed: $e')),
+      );
+      Navigator.of(context).maybePop();
+    }
   }
 
-  void _stopRecording() {
+  Future<void> _stopRecording() async {
+    _timer?.cancel();
+    await _speech.stop();
+    String? path;
+    try {
+      path = await _recorder.stop();
+    } catch (e) {
+      // ignore and close
+    }
+    if (!mounted) return;
     setState(() {
       _isRecording = false;
     });
-    // TODO: Stop actual audio recording
-    // For now, return a placeholder audio URL
-    Navigator.of(context).pop('audio_placeholder');
+    Navigator.of(context).pop({'path': path ?? '', 'transcript': _transcript});
   }
 
-  void _cancel() {
-    // TODO: Cancel recording and cleanup
-    Navigator.of(context).pop();
+  Future<void> _cancel() async {
+    _timer?.cancel();
+    await _speech.stop();
+    try {
+      await _recorder.stop();
+    } catch (_) {}
+    if (mounted) Navigator.of(context).pop();
   }
 
   String _formatDuration(Duration duration) {

@@ -22,3 +22,4 @@ python-multipart
 # for the dateutil
 python-dateutil
 
+openai-whisper>=20231117

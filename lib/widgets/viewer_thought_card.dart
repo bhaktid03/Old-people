@@ -4,7 +4,7 @@ import '../app/theme/spacing.dart';
 import '../core/localization/l10n.dart';
 import '../features/headlines/data/viewer_thought_model.dart';
 
-class ViewerThoughtCard extends StatelessWidget {
+class ViewerThoughtCard extends StatefulWidget {
   const ViewerThoughtCard({
     super.key,
     required this.thought,
@@ -15,6 +15,13 @@ class ViewerThoughtCard extends StatelessWidget {
   final ViewerThought thought;
   final VoidCallback? onPlay;
   final bool isPlaying;
+
+  @override
+  State<ViewerThoughtCard> createState() => _ViewerThoughtCardState();
+}
+
+class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
+  bool _showTranscript = false;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +41,7 @@ class ViewerThoughtCard extends StatelessWidget {
                 const SizedBox(width: Spacing.sm),
                 Expanded(
                   child: Text(
-                    thought.userName,
+                    widget.thought.userName,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -48,27 +55,38 @@ class ViewerThoughtCard extends StatelessWidget {
             ),
             const SizedBox(height: Spacing.sm),
             // Show audio/video controls if applicable
-            if (thought.type == ThoughtType.audio) ...[
-              _AudioRow(isPlaying: isPlaying, onPlay: onPlay),
-              if (thought.text != null && thought.text!.isNotEmpty) ...[
+            if (widget.thought.type == ThoughtType.audio) ...[
+              _AudioRow(isPlaying: widget.isPlaying, onPlay: widget.onPlay),
+              const SizedBox(height: Spacing.sm),
+              Row(
+                children: [
+                  Text('Transcript', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => setState(() => _showTranscript = !_showTranscript),
+                    child: Text(_showTranscript ? 'Hide' : 'View'),
+                  ),
+                ],
+              ),
+              if (_showTranscript)
+                Text(
+                  (widget.thought.text != null && widget.thought.text!.isNotEmpty)
+                      ? widget.thought.text!
+                      : 'Transcript not available',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+            ] else if (widget.thought.type == ThoughtType.video) ...[
+              _VideoPlayer(onPlay: widget.onPlay),
+              if (widget.thought.text != null && widget.thought.text!.isNotEmpty) ...[
                 const SizedBox(height: Spacing.sm),
                 Text(
-                  thought.text!,
+                  widget.thought.text!,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ],
-            ] else if (thought.type == ThoughtType.video) ...[
-              _VideoPlayer(onPlay: onPlay),
-              if (thought.text != null && thought.text!.isNotEmpty) ...[
-                const SizedBox(height: Spacing.sm),
-                Text(
-                  thought.text!,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ],
-            ] else if (thought.text != null && thought.text!.isNotEmpty) ...[
+            ] else if (widget.thought.text != null && widget.thought.text!.isNotEmpty) ...[
               Text(
-                thought.text!,
+                widget.thought.text!,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],

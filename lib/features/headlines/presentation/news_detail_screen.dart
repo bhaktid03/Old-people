@@ -7,6 +7,7 @@ import '../../../widgets/audio_recording_screen.dart';
 import '../data/viewer_thought_model.dart';
 import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
+import '../../../services/audio_player_service.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key, required this.headline});
@@ -21,6 +22,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   double _textScale = 1.0;
   double _baseScale = 1.0;
   final List<ViewerThought> _thoughts = <ViewerThought>[];
+  final AudioPlayerService _player = AudioPlayerService();
+  String? _playingId;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +120,17 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
             ] else ...[
               const SizedBox(height: Spacing.xs),
               ..._thoughts
-                  .map((t) => ViewerThoughtCard(thought: t))
+                  .map((t) => ViewerThoughtCard(
+                        thought: t,
+                        isPlaying: _playingId == t.id,
+                        onPlay: () async {
+                          if (t.audioUrl == null || t.audioUrl!.isEmpty) return;
+                          await _player.togglePlay(id: t.id, sourcePath: t.audioUrl!);
+                          setState(() {
+                            _playingId = _player.currentId;
+                          });
+                        },
+                      ))
                   .toList(),
               const SizedBox(height: 80),
             ],
@@ -143,10 +156,18 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     if (result != null) {
       switch (result) {
         case 'record_audio':
-          final audioResult = await Navigator.of(context).push<String>(
+          final audioResult = await Navigator.of(context).push<dynamic>(
             MaterialPageRoute(builder: (_) => const AudioRecordingScreen()),
           );
           if (audioResult != null && mounted) {
+            String? path;
+            String? transcript;
+            if (audioResult is String) {
+              path = audioResult;
+            } else if (audioResult is Map) {
+              path = audioResult['path'] as String?;
+              transcript = (audioResult['transcript'] as String?)?.trim();
+            }
             setState(() {
               _thoughts.insert(
                 0,
@@ -154,7 +175,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   userName: 'You',
                   type: ThoughtType.audio,
-                  audioUrl: audioResult,
+                  audioUrl: path,
+                  text: (transcript != null && transcript.isNotEmpty) ? transcript : null,
                   createdAt: DateTime.now(),
                 ),
               );
