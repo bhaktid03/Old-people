@@ -158,7 +158,7 @@ class _PostGrid extends StatelessWidget {
       itemCount: posts.length,
       itemBuilder: (context, index) {
         final p = posts[index];
-        final String? cover = p.videoThumbnailUrl ?? (p.imageUrls.isNotEmpty ? p.imageUrls.first : null);
+        final String? cover = p.imageUrls.isNotEmpty ? p.imageUrls.first : null;
         return InkWell(
           onTap: () {
             Navigator.of(context).push(
@@ -167,7 +167,7 @@ class _PostGrid extends StatelessWidget {
                   userName: p.userName,
                   text: p.text,
                   imageUrls: p.imageUrls,
-                  videoThumbnailUrl: p.videoThumbnailUrl,
+                  videoPath: p.videoPath,
                   likes: p.likes,
                   comments: p.comments,
                 ),
@@ -187,7 +187,7 @@ class _PostGrid extends StatelessWidget {
                   )
                 else
                   Container(color: AppColors.outline.withOpacity(0.2)),
-                if (p.videoThumbnailUrl != null)
+                if (p.videoPath != null)
                   Align(
                     alignment: Alignment.bottomRight,
                     child: Padding(
@@ -218,7 +218,7 @@ class ProfilePostDetailScreen extends StatelessWidget {
     required this.userName,
     required this.text,
     required this.imageUrls,
-    required this.videoThumbnailUrl,
+    required this.videoPath,
     required this.likes,
     required this.comments,
   });
@@ -226,7 +226,7 @@ class ProfilePostDetailScreen extends StatelessWidget {
   final String userName;
   final String text;
   final List<String> imageUrls;
-  final String? videoThumbnailUrl;
+  final String? videoPath;
   final int likes;
   final int comments;
 
@@ -241,7 +241,7 @@ class ProfilePostDetailScreen extends StatelessWidget {
             userName: userName,
             text: text,
             imageUrls: imageUrls,
-            videoThumbnailUrl: videoThumbnailUrl,
+            videoPath: videoPath,
             likes: likes,
             comments: comments,
           ),
@@ -256,7 +256,7 @@ class _Post {
     required this.userName,
     required this.text,
     this.imageUrls = const [],
-    this.videoThumbnailUrl,
+    this.videoPath,
     required this.likes,
     required this.comments,
     required this.createdAt,
@@ -265,7 +265,7 @@ class _Post {
   final String userName;
   final String text;
   final List<String> imageUrls;
-  final String? videoThumbnailUrl;
+  final String? videoPath;
   final int likes;
   final int comments;
   final DateTime createdAt;
