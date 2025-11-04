@@ -39,6 +39,51 @@ const options: swaggerJsdoc.Options = {
           },
           required: ['_id', 'createdAt', 'updatedAt']
         },
+        Conversation: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string', description: 'Conversation ID' },
+            type: { type: 'string', enum: ['solo', 'group'] },
+            memberIds: { type: 'array', items: { type: 'string', description: 'Profile _id (E.164 phone)', example: '+919876543210' } },
+            adminIds: { type: 'array', items: { type: 'string' } },
+            name: { type: 'string' },
+            avatarUrl: { type: 'string', format: 'uri' },
+            lastMessageId: { type: 'string' },
+            lastMessageAt: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id', 'type', 'memberIds', 'createdAt', 'updatedAt']
+        },
+        MessageReceipt: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            deliveredAt: { type: 'string', format: 'date-time' },
+            seenAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['userId']
+        },
+        Message: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            conversationId: { type: 'string' },
+            senderId: { type: 'string', description: 'Profile _id (E.164 phone)', example: '+919876543210' },
+            type: { type: 'string', enum: ['text', 'image', 'voice'] },
+            text: { type: 'string' },
+            mediaUrl: { type: 'string', format: 'uri' },
+            mediaMimeType: { type: 'string' },
+            voiceDurationMs: { type: 'integer' },
+            receipts: { type: 'array', items: { $ref: '#/components/schemas/MessageReceipt' } },
+            editedAt: { type: 'string', format: 'date-time' },
+            deletedAt: { type: 'string', format: 'date-time' },
+            deletedForUserIds: { type: 'array', items: { type: 'string' } },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id', 'conversationId', 'senderId', 'type', 'createdAt', 'updatedAt']
+        },
         Profile: {
           type: 'object',
           properties: {
@@ -65,7 +110,7 @@ const options: swaggerJsdoc.Options = {
           properties: {
             id: { type: 'string', description: 'Thought ID' },
             newsUrl: { type: 'string', format: 'uri', description: 'Canonical news article URL' },
-            userId: { type: 'string', description: 'Author user ID' },
+            userId: { type: 'string', description: 'Author Profile _id (E.164 phone)', example: '+919876543210' },
             contentType: { type: 'string', enum: ['text', 'audio', 'video'] },
             content: {
               oneOf: [
@@ -122,7 +167,7 @@ const options: swaggerJsdoc.Options = {
           required: ['newsUrl', 'userId', 'contentType', 'content'],
           properties: {
             newsUrl: { type: 'string', format: 'uri', description: 'News article URL from /news' },
-            userId: { type: 'string', description: 'Author user ID' },
+            userId: { type: 'string', description: 'Author Profile _id (E.164 phone)', example: '+919876543210' },
             contentType: { type: 'string', enum: ['text', 'audio', 'video'] },
             content: { $ref: '#/components/schemas/Thought/properties/content' },
           },

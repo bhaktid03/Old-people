@@ -112,7 +112,9 @@ export async function createUserHandler(req: Request, res: Response) {
  *         name: id
  *         required: true
  *         schema:
- *           type: string
+  *           type: string
+  *           example: +919876543210
+  *           description: Profile _id (E.164 phone)
  *     responses:
  *       200:
  *         description: User found
