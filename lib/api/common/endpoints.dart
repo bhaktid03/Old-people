@@ -3,7 +3,7 @@
 
 /// Base URL for the API. Keep this as a single source of truth.
 /// Example: https://api.example.com
-String apiBaseUrl = 'http://10.14.5.20:4000';
+String apiBaseUrl = 'http://10.21.1.218:4000';
 
 /// Helpers for building endpoint URLs from the base.
 class Endpoints {

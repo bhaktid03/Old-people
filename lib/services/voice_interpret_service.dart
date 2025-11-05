@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
-import '../core/network/dio_client.dart';
 
 class VoiceInterpretService {
   VoiceInterpretService._();
@@ -11,7 +10,17 @@ class VoiceInterpretService {
     required String filePath,
     required String language,
   }) async {
-    final dio = DioClient().dio;
+    // Use a dedicated base URL for the LLM/STT server to avoid conflicts
+    // with the main application API base URL.
+    final dio = Dio(BaseOptions(
+      baseUrl: const String.fromEnvironment(
+        'LLM_BASE_URL',
+        defaultValue: 'http://127.0.0.1:8000',
+      ),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 180),
+      sendTimeout: const Duration(seconds: 60),
+    ));
     final file = File(filePath);
     final form = FormData.fromMap({
       'file': await MultipartFile.fromFile(file.path, filename: file.uri.pathSegments.last),

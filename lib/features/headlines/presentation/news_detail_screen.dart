@@ -11,7 +11,7 @@ import '../data/viewer_thought_model.dart';
 import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
 import '../../../services/audio_player_service.dart';
-// import '../../../services/voice_interpret_service.dart';
+import '../../../services/voice_interpret_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../api/thoughts/thoughts_repository.dart';
 import '../../../core/session/session_manager.dart';
@@ -46,11 +46,38 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     });
 
     try {
-      final thoughts = await _thoughtsRepository.getThoughtsByNewsUrl(widget.headline.url!);
+      final fresh = await _thoughtsRepository.getThoughtsByNewsUrl(widget.headline.url!);
       if (mounted) {
         setState(() {
-          _thoughts.clear();
-          _thoughts.addAll(thoughts);
+          // Preserve local transcript/llmReply/media fields when server doesn't provide them yet
+          final existingById = {for (final t in _thoughts) t.id: t};
+          final merged = <ViewerThought>[];
+          for (final f in fresh) {
+            final prev = existingById[f.id];
+            if (prev == null) {
+              merged.add(f);
+            } else {
+              merged.add(ViewerThought(
+                id: f.id,
+                userName: f.userName,
+                type: f.type,
+                text: f.text ?? prev.text, // keep transcript if server missing
+                audioUrl: f.audioUrl ?? prev.audioUrl,
+                videoUrl: f.videoUrl ?? prev.videoUrl,
+                localFilePath: prev.localFilePath ?? f.localFilePath,
+                remoteFileId: f.remoteFileId ?? prev.remoteFileId,
+                mediaUrl: f.mediaUrl ?? prev.mediaUrl,
+                duration: f.duration ?? prev.duration,
+                status: f.status,
+                llmReply: f.llmReply ?? prev.llmReply, // keep caption if server missing
+                headlineId: f.headlineId ?? prev.headlineId,
+                createdAt: f.createdAt,
+              ));
+            }
+          }
+          _thoughts
+            ..clear()
+            ..addAll(merged);
           _isLoadingThoughts = false;
         });
       }
@@ -350,7 +377,51 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 _isUploading = false;
               });
               _announce(context, 'Audio thought uploaded');
-              // Reload thoughts to get any updates
+              // After upload, call STT+LLM to get transcript and summary
+              try {
+                final vi = VoiceInterpretService();
+                final viResp = await vi.uploadAndInterpret(
+                  filePath: audioFile.path,
+                  language: L10n.locale.value,
+                );
+                final transcript = (viResp['transcript'] as String?)?.trim();
+                final llmReply = (viResp['llmReply'] as String?)?.trim();
+
+                if (mounted) {
+                  setState(() {
+                    final idx = _thoughts.indexWhere((t) => t.id == thought.id);
+                    if (idx != -1) {
+                      _thoughts[idx] = ViewerThought(
+                        id: _thoughts[idx].id,
+                        userName: _thoughts[idx].userName,
+                        type: _thoughts[idx].type,
+                        text: (transcript != null && transcript.isNotEmpty)
+                            ? transcript
+                            : _thoughts[idx].text,
+                        audioUrl: _thoughts[idx].audioUrl,
+                        videoUrl: _thoughts[idx].videoUrl,
+                        localFilePath: _thoughts[idx].localFilePath,
+                        remoteFileId: _thoughts[idx].remoteFileId,
+                        mediaUrl: _thoughts[idx].mediaUrl,
+                        duration: _thoughts[idx].duration,
+                        status: _thoughts[idx].status,
+                        llmReply: llmReply ?? _thoughts[idx].llmReply,
+                        headlineId: _thoughts[idx].headlineId,
+                        createdAt: _thoughts[idx].createdAt,
+                      );
+                    }
+                  });
+                }
+              } catch (e) {
+                // Non-fatal: keep UI, just log/notify
+                print('Voice interpret failed: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Transcription running in background')),
+                  );
+                }
+              }
+              // Reload thoughts to get any server-side updates later
               _loadThoughts();
             } catch (e) {
               if (!mounted) return;
