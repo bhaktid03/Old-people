@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../core/localization/l10n.dart';
@@ -10,6 +11,7 @@ import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
 import '../../../services/audio_player_service.dart';
 import '../../../services/voice_interpret_service.dart';
+import 'package:just_audio/just_audio.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key, required this.headline});
@@ -26,6 +28,51 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   final List<ViewerThought> _thoughts = <ViewerThought>[];
   final AudioPlayerService _player = AudioPlayerService();
   String? _playingId;
+
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to player state changes to update UI in real-time
+    _playerStateSubscription = _player.playerStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        if (state.playing && _player.currentId != null) {
+          // Audio is playing - show pause button and waves
+          _playingId = _player.currentId;
+        } else {
+          // Audio is paused or completed - show play button, stop waves
+          _playingId = null;
+          // Clear service's currentId when completed
+          if (state.processingState == ProcessingState.completed && _player.currentId != null) {
+            _player.stop();
+          }
+        }
+      });
+    });
+
+    // Also listen to position to detect completion more reliably
+    _positionSubscription = _player.positionStream.listen((position) async {
+      if (!mounted) return;
+      final duration = _player.duration;
+      if (duration != null && position >= duration && _playingId != null) {
+        // Audio reached end - clear playing state
+        setState(() {
+          _playingId = null;
+        });
+        await _player.stop();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _playerStateSubscription?.cancel();
+    _positionSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,9 +175,12 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                         onPlay: () async {
                           if (t.audioUrl == null || t.audioUrl!.isEmpty) return;
                           await _player.togglePlay(id: t.id, sourcePath: t.audioUrl!);
-                          setState(() {
-                            _playingId = _player.currentId;
-                          });
+                          // Immediately update UI state (stream will keep it in sync)
+                          if (mounted) {
+                            setState(() {
+                              _playingId = _player.currentId;
+                            });
+                          }
                         },
                       ))
                   .toList(),
@@ -180,6 +230,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   type: ThoughtType.audio,
                   audioUrl: path,
                   text: (transcript != null && transcript.isNotEmpty) ? transcript : null,
+                  headlineId: widget.headline.id,
                   createdAt: DateTime.now(),
                 ),
               );
@@ -211,6 +262,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                       audioUrl: t.audioUrl,
                       createdAt: t.createdAt,
                       llmReply: llmReply,
+                      headlineId: t.headlineId,
                     );
                   }
                 });

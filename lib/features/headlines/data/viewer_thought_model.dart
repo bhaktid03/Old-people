@@ -12,6 +12,7 @@ class ViewerThought {
     this.duration,
     this.status = ThoughtStatus.pending,
     this.llmReply,
+    this.headlineId,
     required this.createdAt,
   });
 
@@ -26,6 +27,7 @@ class ViewerThought {
   final Duration? duration;
   final ThoughtStatus status; // pending, uploaded, approved, flagged
   final String? llmReply;
+  final String? headlineId; // link to parent headline/article (for MongoDB)
   final DateTime createdAt;
 
   factory ViewerThought.fromJson(Map<String, dynamic> json) {
@@ -43,6 +45,7 @@ class ViewerThought {
           : null,
       status: ThoughtStatus.fromString(json['status'] as String? ?? 'pending'),
       llmReply: json['llmReply'] as String?,
+      headlineId: json['headlineId'] as String?,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -61,6 +64,7 @@ class ViewerThought {
         'durationMs': duration?.inMilliseconds,
         'status': status.toString(),
         'llmReply': llmReply,
+        'headlineId': headlineId,
         'createdAt': createdAt.toIso8601String(),
       };
 }

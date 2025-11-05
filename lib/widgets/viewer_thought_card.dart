@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -23,8 +24,42 @@ class ViewerThoughtCard extends StatefulWidget {
   State<ViewerThoughtCard> createState() => _ViewerThoughtCardState();
 }
 
-class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
+class _ViewerThoughtCardState extends State<ViewerThoughtCard> with SingleTickerProviderStateMixin {
   bool _showTranscript = false;
+  late AnimationController _waveController;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+
+  @override
+  void didUpdateWidget(ViewerThoughtCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync animation with playing state
+    if (widget.isPlaying && !oldWidget.isPlaying) {
+      // Start animation when playback starts
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isPlaying) {
+          _waveController.repeat();
+        }
+      });
+    } else if (!widget.isPlaying && oldWidget.isPlaying) {
+      // Stop and reset animation when playback stops/pauses/completes
+      _waveController.stop();
+      _waveController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +94,37 @@ class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
             const SizedBox(height: Spacing.sm),
             // Show audio/video controls if applicable
             if (widget.thought.type == ThoughtType.audio) ...[
-              _AudioRow(isPlaying: widget.isPlaying, onPlay: widget.onPlay),
+              // Assistant reply as caption above audio player
+              if (widget.thought.llmReply != null && widget.thought.llmReply!.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Spacing.sm,
+                    vertical: Spacing.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brand.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.brand.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    widget.thought.llmReply!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: Spacing.md),
+              ],
+              _AudioRow(
+                isPlaying: widget.isPlaying,
+                onPlay: widget.onPlay,
+                waveController: widget.isPlaying ? _waveController : null,
+              ),
               const SizedBox(height: Spacing.sm),
               Row(
                 children: [
@@ -78,12 +143,6 @@ class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
                       : 'Transcript not available',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
-              if (widget.thought.llmReply != null && widget.thought.llmReply!.isNotEmpty) ...[
-                const SizedBox(height: Spacing.sm),
-                Text('Assistant reply', style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 6),
-                Text(widget.thought.llmReply!, style: Theme.of(context).textTheme.bodyLarge),
-              ],
             ] else if (widget.thought.type == ThoughtType.video) ...[
               if (widget.thought.videoUrl != null) ...[
                 _ThoughtVideoPlayer(videoPath: widget.thought.videoUrl!),
@@ -141,10 +200,15 @@ class _ViewerThoughtCardState extends State<ViewerThoughtCard> {
 }
 
 class _AudioRow extends StatelessWidget {
-  const _AudioRow({required this.isPlaying, this.onPlay});
+  const _AudioRow({
+    required this.isPlaying,
+    this.onPlay,
+    this.waveController,
+  });
 
   final bool isPlaying;
   final VoidCallback? onPlay;
+  final AnimationController? waveController;
 
   @override
   Widget build(BuildContext context) {
@@ -165,15 +229,52 @@ class _AudioRow extends StatelessWidget {
         ),
         const SizedBox(width: Spacing.md),
         Expanded(
-          child: Container(
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.outline,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+          child: isPlaying && waveController != null
+              ? _SoundWave(controller: waveController!)
+              : Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.outline.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
         ),
       ],
+    );
+  }
+}
+
+class _SoundWave extends StatelessWidget {
+  const _SoundWave({required this.controller});
+
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        return SizedBox(
+          height: 40,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: List.generate(20, (index) {
+              final delay = index * 0.1;
+              final value = (controller.value + delay) % 1.0;
+              final height = 8 + (math.sin(value * math.pi * 2) * 0.5 + 0.5) * 24;
+              return Container(
+                width: 3,
+                height: height,
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withOpacity(0.6 + (value * 0.4)),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 }

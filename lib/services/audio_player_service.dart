@@ -9,12 +9,20 @@ class AudioPlayerService {
   String? _currentId;
 
   String? get currentId => _currentId;
+  bool get isPlaying => _player.playing;
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
+  Stream<Duration> get positionStream => _player.positionStream;
+  Duration? get duration => _player.duration;
 
   Future<void> togglePlay({required String id, required String sourcePath}) async {
     if (_currentId == id && _player.playing) {
       await _player.pause();
+      _currentId = null;
       return;
+    }
+    // Stop any currently playing audio
+    if (_currentId != null && _currentId != id) {
+      await _player.stop();
     }
     _currentId = id;
     await _player.setFilePath(sourcePath);
