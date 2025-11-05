@@ -15,18 +15,31 @@ class AudioPlayerService {
   Duration? get duration => _player.duration;
 
   Future<void> togglePlay({required String id, required String sourcePath}) async {
-    if (_currentId == id && _player.playing) {
-      await _player.pause();
-      _currentId = null;
-      return;
+    try {
+      if (_currentId == id && _player.playing) {
+        await _player.pause();
+        _currentId = null;
+        return;
+      }
+
+      // Stop any currently playing audio if switching tracks
+      if (_currentId != null && _currentId != id) {
+        await _player.stop();
+      }
+
+      _currentId = id;
+
+      // Stream URLs vs local files
+      if (sourcePath.startsWith('http://') || sourcePath.startsWith('https://')) {
+        await _player.setUrl(sourcePath);
+      } else {
+        await _player.setFilePath(sourcePath);
+      }
+
+      await _player.play();
+    } catch (e) {
+      rethrow;
     }
-    // Stop any currently playing audio
-    if (_currentId != null && _currentId != id) {
-      await _player.stop();
-    }
-    _currentId = id;
-    await _player.setFilePath(sourcePath);
-    await _player.play();
   }
 
   Future<void> stop() async {

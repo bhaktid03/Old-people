@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'dart:io';
 import '../../../app/theme/spacing.dart';
 import '../../../core/localization/l10n.dart';
 import '../../../widgets/share_thoughts_modal.dart';
@@ -10,8 +11,10 @@ import '../data/viewer_thought_model.dart';
 import '../../../widgets/viewer_thought_card.dart';
 import '../data/headline_model.dart';
 import '../../../services/audio_player_service.dart';
-import '../../../services/voice_interpret_service.dart';
+// import '../../../services/voice_interpret_service.dart';
 import 'package:just_audio/just_audio.dart';
+import '../../../api/thoughts/thoughts_repository.dart';
+import '../../../core/session/session_manager.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key, required this.headline});
@@ -27,7 +30,39 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   double _baseScale = 1.0;
   final List<ViewerThought> _thoughts = <ViewerThought>[];
   final AudioPlayerService _player = AudioPlayerService();
+  final ThoughtsRepository _thoughtsRepository = ThoughtsRepository();
+  final SessionManager _sessionManager = SessionManager();
   String? _playingId;
+  bool _isUploading = false;
+  bool _isLoadingThoughts = false;
+
+  Future<void> _loadThoughts() async {
+    if (widget.headline.url == null || widget.headline.url!.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingThoughts = true;
+    });
+
+    try {
+      final thoughts = await _thoughtsRepository.getThoughtsByNewsUrl(widget.headline.url!);
+      if (mounted) {
+        setState(() {
+          _thoughts.clear();
+          _thoughts.addAll(thoughts);
+          _isLoadingThoughts = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading thoughts: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingThoughts = false;
+        });
+      }
+    }
+  }
 
   StreamSubscription<PlayerState>? _playerStateSubscription;
   StreamSubscription<Duration>? _positionSubscription;
@@ -35,6 +70,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // initial load from backend
+    _loadThoughts();
     // Listen to player state changes to update UI in real-time
     _playerStateSubscription = _player.playerStateStream.listen((state) {
       if (!mounted) return;
@@ -156,7 +193,12 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: Spacing.sm),
-            if (_thoughts.isEmpty) ...[
+            if (_isLoadingThoughts) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: Spacing.md),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ] else if (_thoughts.isEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: Spacing.md),
                 child: Text(
@@ -173,13 +215,42 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                         thought: t,
                         isPlaying: _playingId == t.id,
                         onPlay: () async {
-                          if (t.audioUrl == null || t.audioUrl!.isEmpty) return;
-                          await _player.togglePlay(id: t.id, sourcePath: t.audioUrl!);
-                          // Immediately update UI state (stream will keep it in sync)
-                          if (mounted) {
-                            setState(() {
-                              _playingId = _player.currentId;
-                            });
+                          try {
+                            // Use mediaUrl if available (from server), otherwise use local file or audioUrl
+                            String? sourcePath;
+                            if (t.mediaUrl != null && t.mediaUrl!.isNotEmpty) {
+                              sourcePath = t.mediaUrl;
+                              print('[NewsDetailScreen] Using mediaUrl: $sourcePath');
+                            } else if (t.localFilePath != null && t.localFilePath!.isNotEmpty) {
+                              sourcePath = t.localFilePath;
+                              print('[NewsDetailScreen] Using localFilePath: $sourcePath');
+                            } else if (t.audioUrl != null && t.audioUrl!.isNotEmpty) {
+                              sourcePath = t.audioUrl;
+                              print('[NewsDetailScreen] Using audioUrl: $sourcePath');
+                            }
+
+                            if (sourcePath == null || sourcePath.isEmpty) {
+                              print('[NewsDetailScreen] No valid source path found for thought: ${t.id}');
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('No audio source available')),
+                              );
+                              return;
+                            }
+
+                            print('[NewsDetailScreen] Playing audio: id=${t.id}, sourcePath=$sourcePath');
+                            await _player.togglePlay(id: t.id, sourcePath: sourcePath);
+                            if (mounted) {
+                              setState(() {
+                                _playingId = _player.currentId;
+                              });
+                            }
+                          } catch (e) {
+                            print('[NewsDetailScreen] Error playing audio: $e');
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error playing audio: $e')),
+                              );
+                            }
                           }
                         },
                       ))
@@ -204,8 +275,17 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   }
 
   void _showShareThoughtsModal(BuildContext context) async {
+    await _sessionManager.init();
+    final userId = _sessionManager.userId;
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to share your thoughts')),
+      );
+      return;
+    }
+
     final result = await showShareThoughtsModal<String>(context);
-    if (result != null) {
+    if (result != null && mounted) {
       switch (result) {
         case 'record_audio':
           final audioResult = await Navigator.of(context).push<dynamic>(
@@ -220,58 +300,67 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               path = audioResult['path'] as String?;
               transcript = (audioResult['transcript'] as String?)?.trim();
             }
-            final thoughtId = DateTime.now().millisecondsSinceEpoch.toString();
+
+            if (path == null || path.isEmpty) return;
+
+            final audioFile = File(path);
+            if (!await audioFile.exists()) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Audio file not found')),
+              );
+              return;
+            }
+
+            // Optimistically add thought
+            final tempId = DateTime.now().millisecondsSinceEpoch.toString();
             setState(() {
+              _isUploading = true;
               _thoughts.insert(
                 0,
                 ViewerThought(
-                  id: thoughtId,
+                  id: tempId,
                   userName: 'You',
                   type: ThoughtType.audio,
-                  audioUrl: path,
+                  localFilePath: path,
                   text: (transcript != null && transcript.isNotEmpty) ? transcript : null,
                   headlineId: widget.headline.id,
                   createdAt: DateTime.now(),
+                  status: ThoughtStatus.pending,
                 ),
               );
             });
-            _announce(context, 'Audio thought added');
+            _announce(context, 'Uploading audio thought...');
 
-            // Send to server for Whisper STT + LLM
-            if (path != null && path.isNotEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Uploading for transcription...')),
+            // Upload to server
+            try {
+              final thought = await _thoughtsRepository.createAudioThought(
+                newsUrl: widget.headline.url ?? '',
+                userId: userId,
+                audioFile: audioFile,
               );
-              try {
-                final resp = await VoiceInterpretService().uploadAndInterpret(
-                  filePath: path,
-                  language: L10n.locale.value == 'hi' ? 'hi' : 'en',
-                );
-                final serverTranscript = (resp['transcript'] as String?)?.trim();
-                final llmReply = (resp['llmReply'] as String?)?.trim();
-                if (!mounted) return;
-                setState(() {
-                  final idx = _thoughts.indexWhere((t) => t.id == thoughtId);
-                  if (idx != -1) {
-                    final t = _thoughts[idx];
-                    _thoughts[idx] = ViewerThought(
-                      id: t.id,
-                      userName: t.userName,
-                      type: t.type,
-                      text: (serverTranscript?.isNotEmpty ?? false) ? serverTranscript : t.text,
-                      audioUrl: t.audioUrl,
-                      createdAt: t.createdAt,
-                      llmReply: llmReply,
-                      headlineId: t.headlineId,
-                    );
-                  }
-                });
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Transcription failed: $e')),
-                );
-              }
+
+              if (!mounted) return;
+              setState(() {
+                final idx = _thoughts.indexWhere((t) => t.id == tempId);
+                if (idx != -1) {
+                  _thoughts[idx] = thought;
+                } else {
+                  _thoughts.insert(0, thought);
+                }
+                _isUploading = false;
+              });
+              _announce(context, 'Audio thought uploaded');
+              // Reload thoughts to get any updates
+              _loadThoughts();
+            } catch (e) {
+              if (!mounted) return;
+              setState(() {
+                _thoughts.removeWhere((t) => t.id == tempId);
+                _isUploading = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Failed to upload audio: $e')),
+              );
             }
           }
           break;
@@ -280,19 +369,55 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
             MaterialPageRoute(builder: (_) => const TextInputScreen()),
           );
           if (text != null && text.trim().isNotEmpty && mounted) {
+            // Optimistically add thought
+            final tempId = DateTime.now().millisecondsSinceEpoch.toString();
             setState(() {
+              _isUploading = true;
               _thoughts.insert(
                 0,
                 ViewerThought(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: tempId,
                   userName: 'You',
                   type: ThoughtType.text,
                   text: text.trim(),
                   createdAt: DateTime.now(),
+                  status: ThoughtStatus.pending,
                 ),
               );
             });
-            _announce(context, 'Thought posted');
+            _announce(context, 'Posting thought...');
+
+            // Create thought on server
+            try {
+              final thought = await _thoughtsRepository.createTextThought(
+                newsUrl: widget.headline.url ?? '',
+                userId: userId,
+                text: text.trim(),
+              );
+
+              if (!mounted) return;
+              setState(() {
+                final idx = _thoughts.indexWhere((t) => t.id == tempId);
+                if (idx != -1) {
+                  _thoughts[idx] = thought;
+                } else {
+                  _thoughts.insert(0, thought);
+                }
+                _isUploading = false;
+              });
+              _announce(context, 'Thought posted');
+              // Reload thoughts to get any updates
+              _loadThoughts();
+            } catch (e) {
+              if (!mounted) return;
+              setState(() {
+                _thoughts.removeWhere((t) => t.id == tempId);
+                _isUploading = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Failed to post thought: $e')),
+              );
+            }
           }
           break;
         case 'record_video':
@@ -300,19 +425,63 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
             MaterialPageRoute(builder: (_) => const VideoRecordingScreen()),
           );
           if (videoPath != null && mounted) {
+            final videoFile = File(videoPath);
+            if (!await videoFile.exists()) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Video file not found')),
+              );
+              return;
+            }
+
+            // Optimistically add thought
+            final tempId = DateTime.now().millisecondsSinceEpoch.toString();
             setState(() {
+              _isUploading = true;
               _thoughts.insert(
                 0,
                 ViewerThought(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: tempId,
                   userName: 'You',
                   type: ThoughtType.video,
-                  videoUrl: videoPath,
+                  localFilePath: videoPath,
                   createdAt: DateTime.now(),
+                  status: ThoughtStatus.pending,
                 ),
               );
             });
-            _announce(context, 'Video added');
+            _announce(context, 'Uploading video thought...');
+
+            // Upload to server
+            try {
+              final thought = await _thoughtsRepository.createVideoThought(
+                newsUrl: widget.headline.url ?? '',
+                userId: userId,
+                videoFile: videoFile,
+              );
+
+              if (!mounted) return;
+              setState(() {
+                final idx = _thoughts.indexWhere((t) => t.id == tempId);
+                if (idx != -1) {
+                  _thoughts[idx] = thought;
+                } else {
+                  _thoughts.insert(0, thought);
+                }
+                _isUploading = false;
+              });
+              _announce(context, 'Video thought uploaded');
+              // Reload thoughts to get any updates
+              _loadThoughts();
+            } catch (e) {
+              if (!mounted) return;
+              setState(() {
+                _thoughts.removeWhere((t) => t.id == tempId);
+                _isUploading = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Failed to upload video: $e')),
+              );
+            }
           }
           break;
       }

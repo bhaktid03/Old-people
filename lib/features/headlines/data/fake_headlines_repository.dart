@@ -44,9 +44,27 @@ class FakeHeadlinesRepository implements HeadlinesRepository {
   ];
 
   @override
-  Future<List<Headline>> getHeadlines({required String source, int limit = 5}) async {
+  Future<List<Headline>> getHeadlines({
+    String? source,
+    int limit = 20,
+    String? categories,
+    String? userId,
+  }) async {
     await Future<void>.delayed(const Duration(milliseconds: 250));
-    return _all.where((h) => h.source == source).take(limit).toList();
+    var filtered = _all;
+    if (source != null) {
+      // Map API source values to display names for filtering
+      final sourceMap = {
+        'indian_express': 'The Indian Express',
+        'the_hindu': 'The Hindu',
+        'toi': 'Times of India',
+        'ndtv': 'NDTV',
+        'bbc_hindi': 'BBC Hindi',
+      };
+      final displayName = sourceMap[source] ?? source;
+      filtered = filtered.where((h) => h.source == displayName).toList();
+    }
+    return filtered.take(limit).toList();
   }
 }
 

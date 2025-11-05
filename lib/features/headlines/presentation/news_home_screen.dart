@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme/spacing.dart';
-import '../../../widgets/headline_card.dart';
-import '../data/headlines_repository.dart';
-import '../data/fake_headlines_repository.dart';
 import '../data/headline_model.dart';
+import '../data/api_headlines_repository.dart';
+import '../data/headlines_repository.dart';
 import 'news_detail_screen.dart';
-import '../../../core/localization/l10n.dart';
 
 class NewsHomeScreen extends StatefulWidget {
   const NewsHomeScreen({super.key});
@@ -15,203 +12,325 @@ class NewsHomeScreen extends StatefulWidget {
 }
 
 class _NewsHomeScreenState extends State<NewsHomeScreen> {
-  double _textScale = 1.0; // adjustable text scale for accessibility
+  final HeadlinesRepository _repository = ApiHeadlinesRepository();
+  List<Headline> _headlines = [];
+  bool _isLoading = false;
+  String? _error;
+  String? _selectedSource;
+  int _limit = 20;
 
-  final List<String> _newspapers = const [
-    'The Indian Express',
-    'The Hindu',
-    'Times of India',
-    'Hindustan Times',
-    'Dainik Jagran',
+  // Available news sources based on API
+  final List<Map<String, String?>> _newsSources = [
+    {'value': null, 'label': 'All Sources'},
+    {'value': 'indian_express', 'label': 'Indian Express'},
+    {'value': 'bbc_hindi', 'label': 'BBC Hindi'},
+    {'value': 'ndtv', 'label': 'NDTV'},
+    {'value': 'toi', 'label': 'Times of India'},
+    {'value': 'the_hindu', 'label': 'The Hindu'},
   ];
-
-  String _selectedPaper = 'The Indian Express';
-
-  late final HeadlinesRepository _repo = FakeHeadlinesRepository();
-  Future<List<Headline>>? _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _repo.getHeadlines(source: _selectedPaper, limit: 5);
+    _loadHeadlines();
+  }
+
+  Future<void> _loadHeadlines() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final headlines = await _repository.getHeadlines(
+        source: _selectedSource,
+        limit: _limit,
+      );
+      setState(() {
+        _headlines = headlines;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to load news: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Apply text scale to the whole page for consistent sizing
-    final scaledMedia = MediaQuery.of(context).copyWith(
-      textScaleFactor: _textScale,
-    );
-
-    return MediaQuery(
-      data: scaledMedia,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            L10n.goodMorning,
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
-          toolbarHeight: 72,
-        ),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: Spacing.md),
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _HeaderControls(
-                  newspapers: _newspapers,
-                  selected: _selectedPaper,
-                  onChanged: (v) => setState(() {
-                    _selectedPaper = v;
-                    _future = _repo.getHeadlines(source: _selectedPaper, limit: 5);
-                  }),
-                  textScale: _textScale,
-                  onIncrease: () => setState(() => _textScale = (_textScale + 0.1).clamp(0.9, 1.8)),
-                  onDecrease: () => setState(() => _textScale = (_textScale - 0.1).clamp(0.9, 1.8)),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('News'),
+      ),
+      body: Column(
+        children: [
+          // Source dropdown filter
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.filter_list_rounded),
+                const SizedBox(width: 12),
+                const Text(
+                  'Source:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButton<String?>(
+                    value: _selectedSource,
+                    isExpanded: true,
+                    hint: const Text('Select Source'),
+                    items: _newsSources.map((source) {
+                      return DropdownMenuItem<String?>(
+                        value: source['value'],
+                        child: Text(source['label']!),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _selectedSource = newValue;
+                      });
+                      _loadHeadlines();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // News list or loading/error state
+          Expanded(
+            child: _buildContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _loadHeadlines,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_headlines.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No news articles found',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try selecting a different source',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadHeadlines,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _headlines.length,
+        itemBuilder: (context, index) {
+          final headline = _headlines[index];
+          return _NewsCard(
+            headline: headline,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NewsDetailScreen(headline: headline),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _NewsCard extends StatelessWidget {
+  const _NewsCard({
+    required this.headline,
+    required this.onTap,
+  });
+
+  final Headline headline;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image if available
+              if (headline.imageUrl != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    headline.imageUrl!,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              if (headline.imageUrl != null) const SizedBox(height: 12),
+              // Title
+              Text(
+                headline.title,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
-              FutureBuilder<List<Headline>>(
-                future: _future,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(L10n.failedToLoad,
-                          style: Theme.of(context).textTheme.bodyLarge),
-                    );
-                  }
-                  final data = snapshot.data ?? const <Headline>[];
-                  if (data.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(L10n.noHeadlines,
-                          style: Theme.of(context).textTheme.bodyLarge),
-                    );
-                  }
-                  return Column(
-                    children: data
-                        .map((h) => HeadlineCard(
-                              title: h.title,
-                              summary: h.summary,
-                              source: h.source,
-                              onListen: () => _announce(context, 'Playing headline'),
-                              onOpen: () => _announce(context, 'Opening ${h.source} article'),
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => NewsDetailScreen(headline: h),
-                                  ),
-                                );
-                              },
-                            ))
-                        .toList(),
-                  );
-                },
+              const SizedBox(height: 8),
+              // Summary if available
+              if (headline.summary != null && headline.summary!.isNotEmpty)
+                Text(
+                  headline.summary!,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              if (headline.summary != null && headline.summary!.isNotEmpty)
+                const SizedBox(height: 8),
+              // Source and metadata
+              Row(
+                children: [
+                  Icon(
+                    Icons.newspaper_rounded,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    headline.source,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                  ),
+                  if (headline.category != null) ...[
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.category_outlined,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      headline.category!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                    ),
+                  ],
+                ],
               ),
+              if (headline.publishedAt != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDate(headline.publishedAt!),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
-        // Share Your Thoughts FAB removed as requested
       ),
     );
   }
 
-  void _announce(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, textScaleFactor: 1.1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-}
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
 
-class _HeaderControls extends StatelessWidget {
-  const _HeaderControls({
-    required this.newspapers,
-    required this.selected,
-    required this.onChanged,
-    required this.textScale,
-    required this.onIncrease,
-    required this.onDecrease,
-  });
-
-  final List<String> newspapers;
-  final String selected;
-  final ValueChanged<String> onChanged;
-  final double textScale;
-  final VoidCallback onIncrease;
-  final VoidCallback onDecrease;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Semantics(
-            label: L10n.chooseNewspaper,
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: selected,
-                isExpanded: true,
-                borderRadius: BorderRadius.circular(12),
-                items: newspapers
-                    .map((n) => DropdownMenuItem<String>(
-                          value: n,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(
-                              n,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) onChanged(v);
-                },
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 28),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: Spacing.md),
-        _ScaleButton(label: 'A−', onPressed: onDecrease),
-        const SizedBox(width: Spacing.sm),
-        _ScaleButton(label: 'A+', onPressed: onIncrease),
-      ],
-    );
+    if (difference.inDays > 7) {
+      return '${date.day}/${date.month}/${date.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
+    } else {
+      return 'Just now';
+    }
   }
 }
-
-class _ScaleButton extends StatelessWidget {
-  const _ScaleButton({required this.label, required this.onPressed});
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(56, 48),
-        side: const BorderSide(width: 1.4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-    );
-  }
-}
-
 
