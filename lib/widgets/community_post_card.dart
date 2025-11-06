@@ -163,12 +163,23 @@ class _ImagesGrid extends StatelessWidget {
         itemBuilder: (context, index) {
           final String url = imageUrls[index];
           final bool showOverlay = index == 3 && imageUrls.length > 4;
+          final bool isNetwork = Uri.tryParse(url)?.hasScheme == true &&
+              (url.startsWith('http://') || url.startsWith('https://'));
           return Stack(
             fit: StackFit.expand,
             children: [
               Container(color: AppColors.outline.withOpacity(0.2)),
-              Image.network(url, fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image))),
+              if (isNetwork)
+                Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image)),
+                )
+              else
+                Image.file(
+                  File(url),
+                  fit: BoxFit.cover,
+                ),
               if (showOverlay)
                 Container(
                   color: Colors.black45,
@@ -208,7 +219,11 @@ class _PostVideoPlayerState extends State<_PostVideoPlayer> {
 
   Future<void> _init() async {
     try {
-      final controller = VideoPlayerController.file(File(widget.videoPath));
+      final bool isNetwork = Uri.tryParse(widget.videoPath)?.hasScheme == true &&
+          (widget.videoPath.startsWith('http://') || widget.videoPath.startsWith('https://'));
+      final VideoPlayerController controller = isNetwork
+          ? VideoPlayerController.networkUrl(Uri.parse(widget.videoPath))
+          : VideoPlayerController.file(File(widget.videoPath));
       _controller = controller;
       await controller.initialize();
       controller.setLooping(false);

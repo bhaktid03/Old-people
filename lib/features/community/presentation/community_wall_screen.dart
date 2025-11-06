@@ -1,10 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../widgets/video_recording_screen.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../app/theme/colors.dart';
 import '../../../core/localization/l10n.dart';
 import '../../../widgets/community_post_card.dart';
 import '../../../widgets/mic_dictation_button.dart';
+import '../../../core/ui/ui_utils.dart';
+import '../../../core/session/session_manager.dart';
+import '../../../api/community/community_posts_api.dart';
+import '../../../api/common/endpoints.dart';
 
 class CommunityWallScreen extends StatefulWidget {
   const CommunityWallScreen({super.key});
@@ -15,6 +21,9 @@ class CommunityWallScreen extends StatefulWidget {
 
 class _CommunityWallScreenState extends State<CommunityWallScreen> {
   int _segment = 0; // 0 = trending, 1 = recent
+  final SessionManager _session = SessionManager();
+  final CommunityPostsApi _communityPostsApi = CommunityPostsApi();
+  bool _isLoading = false;
   final List<_Post> _posts = [
     _Post(
       userName: 'Asha',
@@ -45,9 +54,74 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
   ];
 
   Future<void> _refresh() async {
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() {});
+    await _loadPosts();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Ensure session is initialized so userId is available
+    _session.init();
+    _loadPosts();
+  }
+
+  Future<void> _loadPosts({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
+    try {
+      final List<Map<String, dynamic>> raw = await _communityPostsApi.getV2Posts(limit: 20);
+      final List<_Post> mapped = raw.map<_Post>((Map<String, dynamic> p) {
+        final Map<String, dynamic>? author = p['author'] as Map<String, dynamic>?;
+        final String userName = (author?['displayName'] ?? author?['userId'] ?? 'User').toString();
+        final String text = (p['text'] ?? '').toString();
+
+        final List<String> imageUrls = <String>[];
+        final List<String> videoUrls = <String>[];
+
+        final dynamic mediaList = p['media'];
+        if (mediaList is List) {
+          for (final dynamic m in mediaList) {
+            if (m is! Map<String, dynamic>) continue;
+            final String type = (m['type'] ?? '').toString();
+            final String streamPath = (m['streamUrl'] ?? '').toString();
+            if (streamPath.isEmpty) continue;
+            final String url = (streamPath.startsWith('http://') || streamPath.startsWith('https://'))
+                ? streamPath
+                : '$apiBaseUrl$streamPath';
+            if (type == 'image') imageUrls.add(url);
+            if (type == 'video') videoUrls.add(url);
+          }
+        }
+
+        final String? videoPath = videoUrls.isNotEmpty ? videoUrls.first : null;
+
+        final dynamic likesDyn = p['likes'];
+        final dynamic commentsDyn = p['comments'];
+
+        return _Post(
+          userName: userName,
+          text: text,
+          imageUrls: imageUrls,
+          videoPath: videoPath,
+          likes: likesDyn is num ? likesDyn.toInt() : 0,
+          comments: commentsDyn is num ? commentsDyn.toInt() : 0,
+          createdAt: DateTime.tryParse((p['createdAt'] ?? DateTime.now().toIso8601String()).toString()) ?? DateTime.now(),
+        );
+      }).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _posts
+          ..clear()
+          ..addAll(mapped);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      UiUtils.showTopSnackBar(context: context, message: UiUtils.friendlyErrorMessage(e), isError: true);
+    } finally {
+      if (mounted) {
+        if (!silent) setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _openComposer() {
@@ -60,23 +134,59 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
       ),
       builder: (context) {
         return _ComposerSheet(
-          onSubmit: (text, images, videoPath) {
+          onSubmit: (text, images, videoPath) async {
             Navigator.of(context).pop();
-            setState(() {
-              _posts.insert(
-                0,
-                _Post(
-                  userName: 'You',
-                  text: text,
-                  imageUrls: images,
-                  videoPath: videoPath,
-                  likes: 0,
-                  comments: 0,
-                  createdAt: DateTime.now(),
-                ),
+            final BuildContext ctx = context;
+            final String? userId = _session.userId;
+            if (userId == null || userId.isEmpty) {
+              UiUtils.showTopSnackBar(context: ctx, message: 'Please log in first', isError: true);
+              return;
+            }
+
+            try {
+              final List<File> imageFiles = images
+                  .where((p) => p.isNotEmpty && File(p).existsSync())
+                  .map((p) => File(p))
+                  .toList();
+              final List<File> videoFiles = <File>[];
+              if (videoPath != null && videoPath.isNotEmpty && File(videoPath).existsSync()) {
+                videoFiles.add(File(videoPath));
+              }
+
+              final Map<String, dynamic> created = await _communityPostsApi.createV2Post(
+                userId: userId,
+                text: text,
+                images: imageFiles,
+                videos: videoFiles,
               );
-              _segment = 1; // switch to recent to show the new post
-            });
+
+              UiUtils.showTopSnackBar(context: ctx, message: 'Posted successfully', isSuccess: true);
+
+              // Optimistically add to UI; use returned data if needed
+              setState(() {
+                _posts.insert(
+                  0,
+                  _Post(
+                    userName: 'You',
+                    text: text,
+                    imageUrls: images,
+                    videoPath: videoPath,
+                    likes: 0,
+                    comments: 0,
+                    createdAt: DateTime.now(),
+                  ),
+                );
+                _segment = 1;
+              });
+               // Refresh in background without showing loader
+               _loadPosts(silent: true);
+            } catch (e) {
+              UiUtils.showTopSnackBar(
+                context: ctx,
+                message: UiUtils.friendlyErrorMessage(e),
+                isError: true,
+              );
+            }
           },
         );
       },
@@ -120,6 +230,10 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                   ),
                   const SizedBox(height: Spacing.sm),
                   _InlineComposer(onTap: _openComposer),
+                  if (_isLoading) ...[
+                    const SizedBox(height: Spacing.md),
+                    const LinearProgressIndicator(minHeight: 2),
+                  ],
                 ],
               ),
             ),
@@ -257,8 +371,40 @@ class _ComposerSheet extends StatefulWidget {
 
 class _ComposerSheetState extends State<_ComposerSheet> {
   final TextEditingController _controller = TextEditingController();
-  final List<String> _images = <String>[];
+  final List<String> _images = <String>[]; // local file paths or URLs
   String? _videoPath;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile> files = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+      if (files.isEmpty) return;
+      if (!mounted) return;
+      setState(() {
+        _images.addAll(files.map((f) => f.path));
+      });
+    } catch (_) {
+      // no-op: keep UX quiet on cancel
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final XFile? file = await _picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 2),
+      );
+      if (file == null) return;
+      if (!mounted) return;
+      setState(() => _videoPath = file.path);
+    } catch (_) {
+      // no-op
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -322,23 +468,22 @@ class _ComposerSheetState extends State<_ComposerSheet> {
                   _ChipButton(
                     icon: Icons.photo_outlined,
                     label: 'Photo',
-                    onTap: () {
-                      setState(() {
-                        _images.add('https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e');
-                      });
-                    },
+                    onTap: _pickImages,
                   ),
                   _ChipButton(
                     icon: Icons.videocam_outlined,
                     label: 'Video',
+                    onTap: _pickVideo,
+                  ),
+                  _ChipButton(
+                    icon: Icons.fiber_manual_record_outlined,
+                    label: 'Record',
                     onTap: () async {
                       final path = await Navigator.of(context).push<String>(
                         MaterialPageRoute(builder: (_) => const VideoRecordingScreen()),
                       );
                       if (path != null && mounted) {
-                        setState(() {
-                          _videoPath = path;
-                        });
+                        setState(() => _videoPath = path);
                       }
                     },
                   ),
@@ -409,24 +554,7 @@ class _PreviewMedia extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (images.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final url in images)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(url, width: 72, height: 72, fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                            width: 72,
-                            height: 72,
-                            color: AppColors.outline.withOpacity(0.2),
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.broken_image),
-                          )),
-                ),
-            ],
-          ),
+          _ImagesPreviewRemovable(imagePathsOrUrls: images),
         if (videoPath != null) ...[
           const SizedBox(height: Spacing.sm),
           Container(
@@ -448,6 +576,73 @@ class _PreviewMedia extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _ImagesPreviewRemovable extends StatefulWidget {
+  const _ImagesPreviewRemovable({required this.imagePathsOrUrls});
+
+  final List<String> imagePathsOrUrls;
+
+  @override
+  State<_ImagesPreviewRemovable> createState() => _ImagesPreviewRemovableState();
+}
+
+class _ImagesPreviewRemovableState extends State<_ImagesPreviewRemovable> {
+  void _removeAt(int index) {
+    setState(() {
+      widget.imagePathsOrUrls.removeAt(index);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: List<Widget>.generate(widget.imagePathsOrUrls.length, (index) {
+        final String pathOrUrl = widget.imagePathsOrUrls[index];
+        final bool isNetwork = Uri.tryParse(pathOrUrl)?.hasScheme == true &&
+            (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://'));
+        final Widget imageWidget = isNetwork
+            ? Image.network(
+                pathOrUrl,
+                width: 72,
+                height: 72,
+                fit: BoxFit.cover,
+                errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+              )
+            : Image.file(
+                File(pathOrUrl),
+                width: 72,
+                height: 72,
+                fit: BoxFit.cover,
+              );
+        return Stack(
+          children: [
+            ClipRRect(borderRadius: BorderRadius.circular(8), child: imageWidget),
+            Positioned(
+              top: 2,
+              right: 2,
+              child: InkWell(
+                onTap: () => _removeAt(index),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.close, size: 14, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 }

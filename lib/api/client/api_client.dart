@@ -326,6 +326,86 @@ class ApiClient {
     throw HttpException(message, uri: Uri.parse(url));
   }
 
+  Future<Map<String, dynamic>> postMultipartMultiple({
+    required String url,
+    required Map<String, String> fields,
+    required Map<String, List<File>> filesByField,
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 90),
+  }) async {
+    if (_enableLogging) {
+      print('[ApiClient] POST (multipart multiple) $url');
+      print('[ApiClient] Fields: ${jsonEncode(fields)}');
+      print('[ApiClient] Files: ${filesByField.map((k, v) => MapEntry(k, v.map((f) => f.path).toList()))}');
+    }
+
+    final boundary = '----WebKitFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+    final List<int> bodyBytes = <int>[];
+
+    // Add text fields (skip empty values)
+    fields.forEach((key, value) {
+      if (value.isNotEmpty) {
+        bodyBytes.addAll(utf8.encode('--$boundary\r\n'));
+        bodyBytes.addAll(utf8.encode('Content-Disposition: form-data; name="$key"\r\n\r\n'));
+        bodyBytes.addAll(utf8.encode('$value\r\n'));
+      }
+    });
+
+    // Add files for each field; repeat the same field name for multiple files
+    for (final entry in filesByField.entries) {
+      final String fieldName = entry.key; // e.g., 'images', 'audio', 'videos'
+      for (final File file in entry.value) {
+        final String fileName = file.path.split(Platform.pathSeparator).last;
+        final String contentType = _getContentType(fileName);
+        bodyBytes.addAll(utf8.encode('--$boundary\r\n'));
+        bodyBytes.addAll(utf8.encode('Content-Disposition: form-data; name="$fieldName"; filename="$fileName"\r\n'));
+        bodyBytes.addAll(utf8.encode('Content-Type: $contentType\r\n\r\n'));
+        final fileBytes = await file.readAsBytes();
+        bodyBytes.addAll(fileBytes);
+        bodyBytes.addAll(utf8.encode('\r\n'));
+      }
+    }
+
+    bodyBytes.addAll(utf8.encode('--$boundary--\r\n'));
+
+    final HttpClientRequest request = await _httpClient.postUrl(Uri.parse(url));
+    request.contentLength = bodyBytes.length;
+    request.headers.set(HttpHeaders.contentTypeHeader, 'multipart/form-data; boundary=$boundary');
+    if (headers != null && headers.isNotEmpty) {
+      headers.forEach((key, value) {
+        if (key.toLowerCase() != HttpHeaders.contentTypeHeader.toLowerCase()) {
+          request.headers.set(key, value);
+        }
+      });
+    }
+
+    request.add(bodyBytes);
+
+    final HttpClientResponse response = await request.close().timeout(timeout);
+    final String responseBody = await response.transform(utf8.decoder).join();
+
+    if (_enableLogging) {
+      print('[ApiClient] Status: ${response.statusCode}');
+      print('[ApiClient] Response body: ${responseBody.isEmpty ? '<empty>' : responseBody}');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (responseBody.isEmpty) return <String, dynamic>{};
+      final dynamic decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return <String, dynamic>{'data': decoded};
+    }
+
+    String message = 'HTTP ${response.statusCode}';
+    try {
+      final dynamic decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic> && decoded['error'] is String) {
+        message = decoded['error'] as String;
+      }
+    } catch (_) {}
+    throw HttpException(message, uri: Uri.parse(url));
+  }
+
   String _getContentType(String fileName) {
     final extension = fileName.split('.').last.toLowerCase();
     switch (extension) {
