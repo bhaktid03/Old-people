@@ -3,6 +3,7 @@ import { getProfile, upsertProfile } from "./profile.repo.js";
 import { logger } from "../../services/logger.js";
 import { getImageBucket } from "../../config/gridfs.js";
 import { ObjectId } from "mongodb";
+import { getThoughts } from "../thoughts/thoughts.service.js";
 
 function isHttpsUrl(url: string): boolean {
   try {
@@ -335,6 +336,66 @@ export async function upsertProfileHandler(req: Request, res: Response) {
     });
   } catch (e: any) {
     return res.status(500).json({ ok: false, error: e?.message || "profile update failed" });
+  }
+}
+
+/**
+ * @swagger
+ * /api/v1/profiles/{userId}/posts:
+ *   get:
+ *     summary: Get posts/thoughts by a user
+ *     tags: [Profiles]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Maximum number of posts to return
+ *       - in: query
+ *         name: skip
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of posts to skip
+ *     responses:
+ *       200:
+ *         description: List of user posts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Invalid request
+ */
+export async function getProfilePostsHandler(req: Request, res: Response) {
+  const userId = String(req.params.userId);
+  const limit = req.query.limit ? Math.min(Number(req.query.limit), 100) : 50;
+  const skip = req.query.skip ? Number(req.query.skip) : 0;
+
+  try {
+    const posts = await getThoughts({
+      userId,
+      limit,
+      skip,
+    });
+
+    res.json({ ok: true, data: posts });
+  } catch (e: any) {
+    logger.error({ err: e, userId }, "profile_posts_error");
+    return res.status(500).json({ ok: false, error: e?.message || "Failed to fetch posts" });
   }
 }
 
