@@ -1,10 +1,14 @@
 import { Router } from "express";
-import { getProfileHandler, upsertProfileHandler } from "./profile.controller.js";
+import multer from "multer";
+import { getProfileHandler, getProfileImageByUrlHandler, upsertProfileHandler } from "./profile.controller.js";
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+router.get("/image", getProfileImageByUrlHandler);
 router.get("/:userId", getProfileHandler);
-router.put("/:userId", upsertProfileHandler);
+// Accept either JSON body (imageUrl) or multipart/form-data with single `image` file
+router.put("/:userId", upload.single("image"), upsertProfileHandler);
 
 export default router;
 
