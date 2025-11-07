@@ -184,21 +184,38 @@ class ApiClient {
       print('[ApiClient] Image file: ${imageFile.path}');
     }
 
-    final boundary = '----WebKitFormBoundary${DateTime.now().millisecondsSinceEpoch}';
-    final HttpClientRequest request = await _httpClient.putUrl(Uri.parse(url));
-    request.headers.set(HttpHeaders.contentTypeHeader, 'multipart/form-data; boundary=$boundary');
-    if (headers != null) {
-      headers.forEach(request.headers.set);
+    // Validate file exists and is readable
+    if (!await imageFile.exists()) {
+      if (_enableLogging) {
+        print('[ApiClient] ERROR: Image file does not exist: ${imageFile.path}');
+      }
+      throw HttpException('Image file does not exist: ${imageFile.path}', uri: Uri.parse(url));
+    }
+    
+    // Check file size
+    final fileSize = await imageFile.length();
+    if (_enableLogging) {
+      print('[ApiClient] Image file size: $fileSize bytes');
+    }
+    if (fileSize == 0) {
+      if (_enableLogging) {
+        print('[ApiClient] ERROR: Image file is empty: ${imageFile.path}');
+      }
+      throw HttpException('Image file is empty: ${imageFile.path}', uri: Uri.parse(url));
     }
 
-    // Build multipart body
+    final boundary = '----WebKitFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+    
+    // Build multipart body first to calculate content length
     final List<int> bodyBytes = <int>[];
     
     // Add fields
     fields.forEach((key, value) {
-      bodyBytes.addAll(utf8.encode('--$boundary\r\n'));
-      bodyBytes.addAll(utf8.encode('Content-Disposition: form-data; name="$key"\r\n\r\n'));
-      bodyBytes.addAll(utf8.encode('$value\r\n'));
+      if (value.isNotEmpty) {
+        bodyBytes.addAll(utf8.encode('--$boundary\r\n'));
+        bodyBytes.addAll(utf8.encode('Content-Disposition: form-data; name="$key"\r\n\r\n'));
+        bodyBytes.addAll(utf8.encode('$value\r\n'));
+      }
     });
 
     // Add file
@@ -208,13 +225,44 @@ class ApiClient {
     bodyBytes.addAll(utf8.encode('Content-Disposition: form-data; name="$fileFieldName"; filename="$fileName"\r\n'));
     bodyBytes.addAll(utf8.encode('Content-Type: $contentType\r\n\r\n'));
     
-    final fileBytes = await imageFile.readAsBytes();
+    // Read file bytes with error handling
+    List<int> fileBytes;
+    try {
+      fileBytes = await imageFile.readAsBytes();
+      if (_enableLogging) {
+        print('[ApiClient] Read ${fileBytes.length} bytes from image file');
+      }
+      if (fileBytes.isEmpty) {
+        if (_enableLogging) {
+          print('[ApiClient] ERROR: Image file bytes are empty after reading');
+        }
+        throw HttpException('Image file is empty: ${imageFile.path}', uri: Uri.parse(url));
+      }
+    } catch (e) {
+      if (_enableLogging) {
+        print('[ApiClient] ERROR: Failed to read image file: $e');
+      }
+      throw HttpException('Failed to read image file: ${e.toString()}', uri: Uri.parse(url));
+    }
+    
     bodyBytes.addAll(fileBytes);
     bodyBytes.addAll(utf8.encode('\r\n'));
     bodyBytes.addAll(utf8.encode('--$boundary--\r\n'));
 
-    request.add(bodyBytes);
+    // Now create request and set headers with content length
+    final HttpClientRequest request = await _httpClient.putUrl(Uri.parse(url));
     request.contentLength = bodyBytes.length;
+    request.headers.set(HttpHeaders.contentTypeHeader, 'multipart/form-data; boundary=$boundary');
+    if (headers != null && headers.isNotEmpty) {
+      headers.forEach((key, value) {
+        if (key.toLowerCase() != HttpHeaders.contentTypeHeader.toLowerCase()) {
+          request.headers.set(key, value);
+        }
+      });
+    }
+
+    // Add body after headers are set
+    request.add(bodyBytes);
 
     final HttpClientResponse response = await request.close().timeout(timeout);
     final String responseBody = await response.transform(utf8.decoder).join();

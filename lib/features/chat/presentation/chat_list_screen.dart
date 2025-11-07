@@ -3,8 +3,11 @@ import '../../../app/theme/colors.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../core/localization/l10n.dart';
 import '../../../core/session/session_manager.dart';
+import '../../../core/accessibility/accessibility_manager.dart';
 import '../../../api/chats/chats_repository.dart';
 import '../../../api/chats/models/conversation.dart';
+import '../../../api/profiles/profiles_repository.dart';
+import '../../../api/profiles/models/profile.dart';
 import '../data/conversation_adapter.dart';
 import '../data/user_model.dart';
 import 'chat_screen.dart';
@@ -18,7 +21,9 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final ChatsRepository _repository = ChatsRepository();
+  final ProfilesRepository _profilesRepository = ProfilesRepository();
   final SessionManager _session = SessionManager();
+  final AccessibilityManager _accessibilityManager = AccessibilityManager();
   List<Conversation> _conversations = [];
   Map<String, ChatUser> _conversationUsers = {}; // Map conversationId -> ChatUser
   bool _isLoading = true;
@@ -27,7 +32,66 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   void initState() {
     super.initState();
+    _accessibilityManager.addListener(_onThemeChanged);
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    _accessibilityManager.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // Helper methods to get colors based on theme
+  Color _getTextPrimary() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white;
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFF4A3A2A); // Warm dark brown
+    }
+    return AppColors.textPrimary;
+  }
+
+  Color _getTextSecondary() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white.withOpacity(0.7);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFF6B5A4A); // Medium warm brown
+    }
+    return AppColors.textSecondary;
+  }
+
+  Color _getTextMuted() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white.withOpacity(0.5);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFF6B5A4A).withOpacity(0.7);
+    }
+    return AppColors.textMuted;
+  }
+
+  Color _getBackgroundColor() {
+    if (_accessibilityManager.isDarkMode) {
+      return const Color(0xFF121212);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFFF5E6D3); // Warm beige
+    }
+    return AppColors.background;
+  }
+
+  Color _getSurfaceColor() {
+    if (_accessibilityManager.isDarkMode) {
+      return const Color(0xFF1E1E1E);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFFF9F0E6); // Warm cream
+    }
+    return AppColors.surface;
   }
 
   Future<void> _initialize() async {
@@ -52,14 +116,42 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
 
       // Convert conversations to ChatUsers for display
+      // Fetch actual user profiles to get correct names
       final conversationUsers = <String, ChatUser>{};
       for (final conversation in conversations) {
-        final chatUser = ConversationAdapter.conversationToChatUser(
-          conversation,
-          _currentUserId!,
-        );
-        if (chatUser != null) {
-          conversationUsers[conversation.id] = chatUser;
+        if (conversation.type == ConversationType.solo) {
+          final otherMemberId = conversation.memberIds
+              .firstWhere((id) => id != _currentUserId, orElse: () => '');
+          
+          if (otherMemberId.isNotEmpty) {
+            try {
+              // Fetch the actual profile to get the correct display name
+              final profile = await _profilesRepository.getProfile(otherMemberId);
+              conversationUsers[conversation.id] = ChatUser(
+                id: otherMemberId,
+                name: profile.displayName.isNotEmpty ? profile.displayName : otherMemberId,
+                avatarUrl: profile.photoUrl,
+                isOnline: false, // TODO: Get from presence service
+              );
+            } catch (e) {
+              // If profile fetch fails, use the member ID as name
+              conversationUsers[conversation.id] = ChatUser(
+                id: otherMemberId,
+                name: otherMemberId,
+                avatarUrl: null,
+                isOnline: false,
+              );
+            }
+          }
+        } else {
+          // Group conversation
+          final chatUser = ConversationAdapter.conversationToChatUser(
+            conversation,
+            _currentUserId!,
+          );
+          if (chatUser != null) {
+            conversationUsers[conversation.id] = chatUser;
+          }
         }
       }
 
@@ -110,18 +202,29 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = _accessibilityManager.isDarkMode;
+    final isWarm = _accessibilityManager.isWarmMode;
+    
     return Scaffold(
+      backgroundColor: _getBackgroundColor(),
       appBar: AppBar(
+        backgroundColor: _getSurfaceColor(),
+        foregroundColor: _getTextPrimary(),
         title: Text(
           L10n.chats,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: _getTextPrimary(),
               ),
         ),
         leading: const SizedBox(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search_rounded, size: 28),
+            icon: Icon(
+              Icons.search_rounded, 
+              size: 28,
+              color: _getTextPrimary(),
+            ),
             onPressed: () {
               // TODO: Implement search
             },
@@ -131,7 +234,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                color: isDark ? Colors.white70 : AppColors.brand,
+              ),
+            )
           : _conversations.isEmpty
               ? Center(
                   child: Column(
@@ -140,13 +247,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       Icon(
                         Icons.chat_bubble_outline_rounded,
                         size: 64,
-                        color: AppColors.textMuted,
+                        color: _getTextMuted(),
                       ),
                       const SizedBox(height: Spacing.md),
                       Text(
                         'No chats yet',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: AppColors.textMuted,
+                              color: _getTextMuted(),
                             ),
                       ),
                     ],
@@ -154,6 +261,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: _loadConversations,
+                  color: AppColors.brand,
                   child: _conversations.isEmpty
                       ? Center(
                           child: Column(
@@ -162,22 +270,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               Icon(
                                 Icons.chat_bubble_outline_rounded,
                                 size: 64,
-                                color: AppColors.textMuted,
+                                color: _getTextMuted(),
                               ),
                               const SizedBox(height: Spacing.md),
                               Text(
                                 'No chats yet',
                                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      color: AppColors.textMuted,
+                                      color: _getTextMuted(),
                                     ),
                               ),
                             ],
                           ),
                         )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+                      : ListView.builder(
+                          padding: EdgeInsets.zero,
                           itemCount: _conversations.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: Spacing.xs),
                           itemBuilder: (context, index) {
                             final conversation = _conversations[index];
                             final user = _conversationUsers[conversation.id];
@@ -193,6 +300,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               lastMessage: lastMessage,
                               lastTime: lastTime,
                               unreadCount: unreadCount,
+                              isDark: isDark,
+                              isWarm: isWarm,
+                              getTextPrimary: _getTextPrimary,
+                              getTextSecondary: _getTextSecondary,
+                              getTextMuted: _getTextMuted,
+                              getSurfaceColor: _getSurfaceColor,
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
@@ -210,62 +323,290 @@ class _ChatListScreenState extends State<ChatListScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewChatDialog,
         backgroundColor: AppColors.brand,
-        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
         tooltip: 'New chat',
       ),
     );
   }
 
   Future<void> _showNewChatDialog() async {
-    final phoneController = TextEditingController();
+    final searchController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    bool isSearching = false;
+    Profile? foundProfile;
 
-    final result = await showDialog<bool>(
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Chat'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: phoneController,
-            decoration: InputDecoration(
-              labelText: 'Phone Number or User ID',
-              hintText: 'Enter phone number (e.g., +919876543210)',
-              prefixIcon: const Icon(Icons.person_add),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final isDark = _accessibilityManager.isDarkMode;
+          final isWarm = _accessibilityManager.isWarmMode;
+          
+          Color dialogBg = isDark 
+              ? const Color(0xFF1E1E1E) 
+              : (isWarm ? const Color(0xFFF9F0E6) : Colors.white);
+          Color textColor = isDark 
+              ? Colors.white 
+              : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary);
+          Color hintColor = isDark 
+              ? Colors.white.withOpacity(0.5) 
+              : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textMuted);
+
+          Future<void> searchUser() async {
+            final query = searchController.text.trim();
+            if (query.isEmpty) {
+              setDialogState(() {
+                foundProfile = null;
+              });
+              return;
+            }
+
+            setDialogState(() {
+              isSearching = true;
+              foundProfile = null;
+            });
+
+            try {
+              // Normalize phone number
+              String normalizedId = query.replaceAll(RegExp(r'\s+'), '');
+              if (!normalizedId.startsWith('+') && !normalizedId.startsWith('91')) {
+                if (normalizedId.length == 10) {
+                  normalizedId = '+91$normalizedId';
+                } else if (!normalizedId.startsWith('+')) {
+                  normalizedId = '+$normalizedId';
+                }
+              }
+
+              // Try to fetch profile by userId (phone number)
+              final profile = await _profilesRepository.getProfile(normalizedId);
+              setDialogState(() {
+                foundProfile = profile;
+                isSearching = false;
+              });
+            } catch (e) {
+              setDialogState(() {
+                foundProfile = null;
+                isSearching = false;
+              });
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('User not found. Please check the phone number or username.'),
+                    backgroundColor: Colors.orange,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: dialogBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              'New Chat',
+              style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
               ),
             ),
-            keyboardType: TextInputType.phone,
-            textCapitalization: TextCapitalization.none,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter a phone number or user ID';
-              }
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.of(context).pop(true);
-              }
-            },
-            child: const Text('Start Chat'),
-          ),
-        ],
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Enter phone number or user ID',
+                      style: TextStyle(
+                        color: hintColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: searchController,
+                      style: TextStyle(color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'e.g., +919876543210',
+                        hintStyle: TextStyle(color: hintColor),
+                        prefixIcon: Icon(Icons.search, color: hintColor),
+                        suffixIcon: searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.clear, color: hintColor),
+                                onPressed: () {
+                                  searchController.clear();
+                                  setDialogState(() {
+                                    foundProfile = null;
+                                  });
+                                },
+                              )
+                            : const SizedBox.shrink(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: isDark 
+                                ? Colors.white.withOpacity(0.2)
+                                : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: isDark 
+                                ? Colors.white.withOpacity(0.2)
+                                : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: AppColors.brand,
+                            width: 2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: isDark 
+                            ? Colors.white.withOpacity(0.05)
+                            : (isWarm ? const Color(0xFFF5E6D3) : AppColors.background),
+                      ),
+                      keyboardType: TextInputType.phone,
+                      textCapitalization: TextCapitalization.none,
+                      onChanged: (_) => setDialogState(() {}),
+                      onFieldSubmitted: (_) => searchUser(),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter a phone number or user ID';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    if (isSearching)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.brand,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Searching...',
+                              style: TextStyle(color: hintColor, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (foundProfile != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.brand.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.brand.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: AppColors.brand.withOpacity(0.2),
+                              backgroundImage: foundProfile!.photoUrl != null
+                                  ? NetworkImage(foundProfile!.photoUrl!)
+                                  : null,
+                              child: foundProfile!.photoUrl == null
+                                  ? Text(
+                                      foundProfile!.displayName.isNotEmpty
+                                          ? foundProfile!.displayName[0].toUpperCase()
+                                          : '?',
+                                      style: TextStyle(
+                                        color: AppColors.brand,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    foundProfile!.displayName.isNotEmpty
+                                        ? foundProfile!.displayName
+                                        : foundProfile!.userId,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    foundProfile!.userId,
+                                    style: TextStyle(
+                                      color: hintColor,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: hintColor),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: foundProfile != null
+                    ? () async {
+                        Navigator.of(dialogContext).pop();
+                        await _createNewConversation(foundProfile!.userId);
+                      }
+                    : searchController.text.trim().isNotEmpty
+                        ? searchUser
+                        : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(foundProfile != null ? 'Start Chat' : 'Search'),
+              ),
+            ],
+          );
+        },
       ),
     );
-
-    if (result == true && phoneController.text.trim().isNotEmpty) {
-      await _createNewConversation(phoneController.text.trim());
-    }
   }
 
   Future<void> _createNewConversation(String otherUserId) async {
@@ -332,13 +673,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
         );
       }
 
-      // Convert to ChatUser for navigation
-      final chatUser = ConversationAdapter.conversationToChatUser(
-        conversation,
-        _currentUserId!,
+      // Fetch the actual profile to get the correct display name
+      Profile? profile;
+      try {
+        profile = await _profilesRepository.getProfile(normalizedId);
+      } catch (e) {
+        // Profile might not exist, continue with normalizedId as name
+      }
+
+      // Create ChatUser with correct name
+      final chatUser = ChatUser(
+        id: normalizedId,
+        name: profile?.displayName.isNotEmpty == true 
+            ? profile!.displayName 
+            : normalizedId,
+        avatarUrl: profile?.photoUrl,
+        isOnline: false,
       );
 
-      if (chatUser != null && mounted) {
+      if (mounted) {
         // Navigate to chat screen
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -351,15 +704,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
         // Refresh the list to include the new conversation
         await _loadConversations();
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to create conversation'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -380,6 +724,12 @@ class _ChatListItem extends StatelessWidget {
     required this.lastMessage,
     required this.lastTime,
     required this.unreadCount,
+    required this.isDark,
+    required this.isWarm,
+    required this.getTextPrimary,
+    required this.getTextSecondary,
+    required this.getTextMuted,
+    required this.getSurfaceColor,
     required this.onTap,
   });
 
@@ -387,130 +737,193 @@ class _ChatListItem extends StatelessWidget {
   final String lastMessage;
   final String lastTime;
   final int unreadCount;
+  final bool isDark;
+  final bool isWarm;
+  final Color Function() getTextPrimary;
+  final Color Function() getTextSecondary;
+  final Color Function() getTextMuted;
+  final Color Function() getSurfaceColor;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Spacing.md,
-          vertical: Spacing.sm,
-        ),
-        color: AppColors.surface,
-        child: Row(
-          children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: AppColors.brand.withOpacity(0.1),
-                  child: Text(
-                    user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brand,
-                    ),
-                  ),
-                ),
-                if (user.isOnline)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.surface,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            color: getSurfaceColor(),
+            border: Border(
+              bottom: BorderSide(
+                color: (isDark 
+                    ? Colors.white.withOpacity(0.05)
+                    : (isWarm 
+                        ? const Color(0xFFD4C4B0).withOpacity(0.2)
+                        : AppColors.outline.withOpacity(0.1))),
+                width: 0.5,
+              ),
             ),
-            const SizedBox(width: Spacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          child: Row(
+            children: [
+              // Avatar with online indicator
+              Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          user.name,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (lastTime.isNotEmpty)
-                        Text(
-                          lastTime,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.textMuted,
-                                fontSize: 12,
-                              ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: Spacing.xs / 2),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          lastMessage,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: unreadCount > 0
-                                    ? AppColors.textPrimary
-                                    : AppColors.textMuted,
-                                fontWeight: unreadCount > 0
-                                    ? FontWeight.w500
-                                    : FontWeight.normal,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (unreadCount > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.brand,
-                            shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 20,
-                            minHeight: 20,
-                          ),
-                          child: Center(
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.brand.withOpacity(0.1),
+                    ),
+                    child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                        ? ClipOval(
+                            child: Image.network(
+                              user.avatarUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Text(
+                                    user.name.isNotEmpty 
+                                        ? user.name[0].toUpperCase() 
+                                        : '?',
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.brand,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : Center(
                             child: Text(
-                              unreadCount > 99 ? '99+' : unreadCount.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
+                              user.name.isNotEmpty 
+                                  ? user.name[0].toUpperCase() 
+                                  : '?',
+                              style: TextStyle(
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold,
+                                color: AppColors.brand,
                               ),
                             ),
                           ),
-                        ),
-                    ],
                   ),
+                  if (user.isOnline)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: AppColors.success,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: getSurfaceColor(),
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+              // Name, message, and time
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            user.name,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: getTextPrimary(),
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (lastTime.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            lastTime,
+                            style: TextStyle(
+                              color: getTextMuted(),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            lastMessage,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: unreadCount > 0
+                                  ? getTextPrimary()
+                                  : getTextMuted(),
+                              fontWeight: unreadCount > 0
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                              height: 1.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (unreadCount > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.brand,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 22,
+                              minHeight: 22,
+                            ),
+                            child: Center(
+                              child: Text(
+                                unreadCount > 99 ? '99+' : unreadCount.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

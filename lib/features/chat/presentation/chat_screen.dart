@@ -3,6 +3,7 @@ import '../../../app/theme/colors.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../widgets/mic_dictation_button.dart';
 import '../../../core/session/session_manager.dart';
+import '../../../core/accessibility/accessibility_manager.dart';
 import '../../../api/chats/chats_repository.dart';
 import '../../../api/chats/models/conversation.dart';
 import '../../../api/chats/models/message.dart' as api_models;
@@ -27,6 +28,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final ChatsRepository _repository = ChatsRepository();
   final SessionManager _session = SessionManager();
+  final AccessibilityManager _accessibilityManager = AccessibilityManager();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<ChatMessage> _messages = [];
@@ -36,7 +38,77 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _accessibilityManager.addListener(_onThemeChanged);
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    _accessibilityManager.removeListener(_onThemeChanged);
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // Helper methods to get colors based on theme
+  Color _getTextPrimary() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white;
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFF4A3A2A); // Warm dark brown
+    }
+    return AppColors.textPrimary;
+  }
+
+  Color _getTextSecondary() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white.withOpacity(0.7);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFF6B5A4A); // Medium warm brown
+    }
+    return AppColors.textSecondary;
+  }
+
+  Color _getTextMuted() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white.withOpacity(0.5);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFF6B5A4A).withOpacity(0.7);
+    }
+    return AppColors.textMuted;
+  }
+
+  Color _getBackgroundColor() {
+    if (_accessibilityManager.isDarkMode) {
+      return const Color(0xFF121212);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFFF5E6D3); // Warm beige
+    }
+    return AppColors.background;
+  }
+
+  Color _getSurfaceColor() {
+    if (_accessibilityManager.isDarkMode) {
+      return const Color(0xFF1E1E1E);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFFF9F0E6); // Warm cream
+    }
+    return AppColors.surface;
+  }
+
+  Color _getOutlineColor() {
+    if (_accessibilityManager.isDarkMode) {
+      return Colors.white.withOpacity(0.1);
+    } else if (_accessibilityManager.isWarmMode) {
+      return const Color(0xFFD4C4B0); // Warm beige border
+    }
+    return AppColors.outline;
   }
 
   Future<void> _initialize() async {
@@ -57,12 +129,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
 
   Future<void> _loadMessages() async {
     if (_currentUserId == null) return;
@@ -195,8 +261,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = _accessibilityManager.isDarkMode;
+    final isWarm = _accessibilityManager.isWarmMode;
+    
     return Scaffold(
+      backgroundColor: _getBackgroundColor(),
       appBar: AppBar(
+        backgroundColor: _getSurfaceColor(),
+        foregroundColor: _getTextPrimary(),
         title: Row(
           children: [
             Stack(
@@ -226,7 +298,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         color: AppColors.success,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.surface,
+                          color: _getSurfaceColor(),
                           width: 2,
                         ),
                       ),
@@ -243,6 +315,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     widget.user.name,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
+                          color: _getTextPrimary(),
                         ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -265,7 +338,11 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: isDark ? Colors.white70 : AppColors.brand,
+                    ),
+                  )
                 : _messages.isEmpty
                     ? Center(
                         child: Column(
@@ -274,7 +351,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             Icon(
                               Icons.chat_bubble_outline_rounded,
                               size: 64,
-                              color: AppColors.textMuted,
+                              color: _getTextMuted(),
                             ),
                             const SizedBox(height: Spacing.md),
                             Text(
@@ -283,7 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   .textTheme
                                   .titleLarge
                                   ?.copyWith(
-                                    color: AppColors.textMuted,
+                                    color: _getTextMuted(),
                                   ),
                             ),
                             const SizedBox(height: Spacing.xs),
@@ -293,7 +370,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   .textTheme
                                   .bodyMedium
                                   ?.copyWith(
-                                    color: AppColors.textMuted,
+                                    color: _getTextMuted(),
                                   ),
                             ),
                           ],
@@ -326,7 +403,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         vertical: Spacing.xs / 2,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppColors.outline.withOpacity(0.2),
+                                        color: _getOutlineColor().withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
@@ -335,7 +412,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                             .textTheme
                                             .bodySmall
                                             ?.copyWith(
-                                              color: AppColors.textMuted,
+                                              color: _getTextMuted(),
                                               fontSize: 11,
                                             ),
                                       ),
@@ -345,6 +422,11 @@ class _ChatScreenState extends State<ChatScreen> {
                               _MessageBubble(
                                 message: message,
                                 isSent: isSent,
+                                isDark: isDark,
+                                isWarm: isWarm,
+                                getTextPrimary: _getTextPrimary,
+                                getTextMuted: _getTextMuted,
+                                getSurfaceColor: _getSurfaceColor,
                               ),
                             ],
                           );
@@ -353,6 +435,14 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           _MessageInput(
             controller: _messageController,
+            isDark: isDark,
+            isWarm: isWarm,
+            getTextPrimary: _getTextPrimary,
+            getTextSecondary: _getTextSecondary,
+            getTextMuted: _getTextMuted,
+            getBackgroundColor: _getBackgroundColor,
+            getSurfaceColor: _getSurfaceColor,
+            getOutlineColor: _getOutlineColor,
             onSend: _sendMessage,
           ),
         ],
@@ -365,10 +455,20 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.isSent,
+    required this.isDark,
+    required this.isWarm,
+    required this.getTextPrimary,
+    required this.getTextMuted,
+    required this.getSurfaceColor,
   });
 
   final ChatMessage message;
   final bool isSent;
+  final bool isDark;
+  final bool isWarm;
+  final Color Function() getTextPrimary;
+  final Color Function() getTextMuted;
+  final Color Function() getSurfaceColor;
 
   @override
   Widget build(BuildContext context) {
@@ -385,7 +485,7 @@ class _MessageBubble extends StatelessWidget {
           vertical: Spacing.sm,
         ),
         decoration: BoxDecoration(
-          color: isSent ? AppColors.brand : AppColors.surface,
+          color: isSent ? AppColors.brand : getSurfaceColor(),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -394,7 +494,11 @@ class _MessageBubble extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.shadow,
+              color: (isDark 
+                  ? Colors.black.withOpacity(0.3)
+                  : (isWarm 
+                      ? Colors.black.withOpacity(0.1)
+                      : AppColors.shadow)),
               blurRadius: 2,
               offset: const Offset(0, 1),
             ),
@@ -406,7 +510,7 @@ class _MessageBubble extends StatelessWidget {
             Text(
               message.content,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isSent ? Colors.white : AppColors.textPrimary,
+                    color: isSent ? Colors.white : getTextPrimary(),
                     height: 1.4,
                   ),
             ),
@@ -417,7 +521,7 @@ class _MessageBubble extends StatelessWidget {
                 fontSize: 10,
                 color: isSent
                     ? Colors.white.withOpacity(0.8)
-                    : AppColors.textMuted,
+                    : getTextMuted(),
               ),
             ),
           ],
@@ -439,10 +543,26 @@ class _MessageInput extends StatefulWidget {
   const _MessageInput({
     super.key,
     required this.controller,
+    required this.isDark,
+    required this.isWarm,
+    required this.getTextPrimary,
+    required this.getTextSecondary,
+    required this.getTextMuted,
+    required this.getBackgroundColor,
+    required this.getSurfaceColor,
+    required this.getOutlineColor,
     required this.onSend,
   });
 
   final TextEditingController controller;
+  final bool isDark;
+  final bool isWarm;
+  final Color Function() getTextPrimary;
+  final Color Function() getTextSecondary;
+  final Color Function() getTextMuted;
+  final Color Function() getBackgroundColor;
+  final Color Function() getSurfaceColor;
+  final Color Function() getOutlineColor;
   final VoidCallback onSend;
 
   @override
@@ -482,10 +602,14 @@ class _MessageInputState extends State<_MessageInput> {
         vertical: Spacing.sm,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: widget.getSurfaceColor(),
         boxShadow: [
           BoxShadow(
-            color: AppColors.shadow,
+            color: (widget.isDark 
+                ? Colors.black.withOpacity(0.3)
+                : (widget.isWarm 
+                    ? Colors.black.withOpacity(0.1)
+                    : AppColors.shadow)),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -497,16 +621,17 @@ class _MessageInputState extends State<_MessageInput> {
             Expanded(
               child: TextField(
                 controller: widget.controller,
+                style: TextStyle(color: widget.getTextPrimary()),
                 decoration: InputDecoration(
                   hintText: 'Type a message...',
-                  hintStyle: TextStyle(color: AppColors.textMuted),
+                  hintStyle: TextStyle(color: widget.getTextMuted()),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: AppColors.outline),
+                    borderSide: BorderSide(color: widget.getOutlineColor()),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: AppColors.outline),
+                    borderSide: BorderSide(color: widget.getOutlineColor()),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
@@ -517,7 +642,7 @@ class _MessageInputState extends State<_MessageInput> {
                     vertical: Spacing.sm,
                   ),
                   filled: true,
-                  fillColor: AppColors.background,
+                  fillColor: widget.getBackgroundColor(),
                 ),
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
@@ -534,13 +659,13 @@ class _MessageInputState extends State<_MessageInput> {
                 const SizedBox(width: Spacing.sm),
             Container(
               decoration: BoxDecoration(
-                color: _hasText ? AppColors.brand : AppColors.outline.withOpacity(0.3),
+                color: _hasText ? AppColors.brand : widget.getOutlineColor().withOpacity(0.3),
                 shape: BoxShape.circle,
               ),
               child: IconButton(
                 icon: Icon(
                   Icons.send_rounded,
-                  color: _hasText ? Colors.white : AppColors.textMuted,
+                  color: _hasText ? Colors.white : widget.getTextMuted(),
                 ),
                 onPressed: _hasText ? widget.onSend : null,
                 tooltip: 'Send',

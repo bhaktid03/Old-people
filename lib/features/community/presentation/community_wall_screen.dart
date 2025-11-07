@@ -9,6 +9,7 @@ import '../../../widgets/community_post_card.dart';
 import '../../../widgets/mic_dictation_button.dart';
 import '../../../core/ui/ui_utils.dart';
 import '../../../core/session/session_manager.dart';
+import '../../../core/accessibility/accessibility_manager.dart';
 import '../../../api/community/community_posts_api.dart';
 import '../../../api/common/endpoints.dart';
 
@@ -16,10 +17,10 @@ class CommunityWallScreen extends StatefulWidget {
   const CommunityWallScreen({super.key});
 
   @override
-  State<CommunityWallScreen> createState() => _CommunityWallScreenState();
+  State<CommunityWallScreen> createState() => CommunityWallScreenState();
 }
 
-class _CommunityWallScreenState extends State<CommunityWallScreen> {
+class CommunityWallScreenState extends State<CommunityWallScreen> {
   int _segment = 0; // 0 = trending, 1 = recent
   final SessionManager _session = SessionManager();
   final CommunityPostsApi _communityPostsApi = CommunityPostsApi();
@@ -124,13 +125,21 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
     }
   }
 
-  void _openComposer() {
+  void openComposer() {
+    final accessibilityManager = AccessibilityManager();
+    final isDark = accessibilityManager.isDarkMode;
+    final isWarm = accessibilityManager.isWarmMode;
+    
+    Color sheetColor = isDark 
+        ? const Color(0xFF1E1E1E) 
+        : (isWarm ? const Color(0xFFF9F0E6) : AppColors.surface);
+    
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: sheetColor,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         return _ComposerSheet(
@@ -209,7 +218,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
         leading: const SizedBox(), // keep layout clean under shell
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openComposer,
+        onPressed: openComposer,
         backgroundColor: AppColors.brand,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.edit),
@@ -229,7 +238,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                     onChanged: (v) => setState(() => _segment = v),
                   ),
                   const SizedBox(height: Spacing.sm),
-                  _InlineComposer(onTap: _openComposer),
+                  _InlineComposer(onTap: openComposer),
                   if (_isLoading) ...[
                     const SizedBox(height: Spacing.md),
                     const LinearProgressIndicator(minHeight: 2),
@@ -374,6 +383,7 @@ class _ComposerSheetState extends State<_ComposerSheet> {
   final List<String> _images = <String>[]; // local file paths or URLs
   String? _videoPath;
   final ImagePicker _picker = ImagePicker();
+  final AccessibilityManager _accessibilityManager = AccessibilityManager();
 
   Future<void> _pickImages() async {
     try {
@@ -409,99 +419,305 @@ class _ComposerSheetState extends State<_ComposerSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final fontScale = _accessibilityManager.fontScale;
+    final isDark = _accessibilityManager.isDarkMode;
+    final isWarm = _accessibilityManager.isWarmMode;
+    
+    Color backgroundColor = isDark 
+        ? const Color(0xFF1E1E1E) 
+        : (isWarm ? const Color(0xFFF9F0E6) : AppColors.surface);
+    Color textColor = isDark 
+        ? Colors.white 
+        : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary);
+    Color hintColor = isDark 
+        ? Colors.white.withOpacity(0.5) 
+        : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textMuted);
+    
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(Spacing.md),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.outline,
-                    borderRadius: BorderRadius.circular(2),
+        child: Container(
+          color: backgroundColor,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all((20 * fontScale).clamp(16.0, 24.0)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark 
+                          ? Colors.white.withOpacity(0.2)
+                          : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: Spacing.md),
-              Text(L10n.shareYourVichaar, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: Spacing.md),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      maxLines: null,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: L10n.tellUsPlaceholder,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                SizedBox(height: (20 * fontScale).clamp(16.0, 24.0)),
+                Text(
+                  L10n.shareYourVichaar,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: (24 * fontScale).clamp(20.0, 32.0),
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                ),
+                SizedBox(height: (20 * fontScale).clamp(16.0, 24.0)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        maxLines: 6,
+                        autofocus: true,
+                        style: TextStyle(
+                          fontSize: (18 * fontScale).clamp(16.0, 24.0),
+                          color: textColor,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: L10n.tellUsPlaceholder,
+                          hintStyle: TextStyle(
+                            fontSize: (18 * fontScale).clamp(16.0, 24.0),
+                            color: hintColor,
+                          ),
+                          contentPadding: EdgeInsets.all((16 * fontScale).clamp(14.0, 20.0)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark 
+                                  ? Colors.white.withOpacity(0.2)
+                                  : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark 
+                                  ? Colors.white.withOpacity(0.2)
+                                  : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: AppColors.brand,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: isDark 
+                              ? Colors.white.withOpacity(0.05)
+                              : (isWarm ? const Color(0xFFF5E6D3) : AppColors.background),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: Spacing.sm),
-                  MicDictationButton(
-                    controller: _controller,
-                    size: 48,
-                  ),
-                ],
-              ),
-              if (_images.isNotEmpty || _videoPath != null) ...[
-                const SizedBox(height: Spacing.md),
-                _PreviewMedia(images: _images, videoPath: _videoPath),
-              ],
-              const SizedBox(height: Spacing.md),
-              Wrap(
-                spacing: Spacing.sm,
-                runSpacing: Spacing.sm,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _ChipButton(
-                    icon: Icons.photo_outlined,
-                    label: 'Photo',
-                    onTap: _pickImages,
-                  ),
-                  _ChipButton(
-                    icon: Icons.videocam_outlined,
-                    label: 'Video',
-                    onTap: _pickVideo,
-                  ),
-                  _ChipButton(
-                    icon: Icons.fiber_manual_record_outlined,
-                    label: 'Record',
-                    onTap: () async {
-                      final path = await Navigator.of(context).push<String>(
-                        MaterialPageRoute(builder: (_) => const VideoRecordingScreen()),
-                      );
-                      if (path != null && mounted) {
-                        setState(() => _videoPath = path);
-                      }
-                    },
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    child: Text(L10n.cancel),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      widget.onSubmit(_controller.text.trim(), List<String>.from(_images), _videoPath);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brand,
-                      foregroundColor: Colors.white,
+                    SizedBox(width: (12 * fontScale).clamp(10.0, 16.0)),
+                    MicDictationButton(
+                      controller: _controller,
+                      size: (64 * fontScale).clamp(56.0, 72.0),
                     ),
-                    child: Text(L10n.post),
+                  ],
+                ),
+                if (_images.isNotEmpty || _videoPath != null) ...[
+                  SizedBox(height: (24 * fontScale).clamp(20.0, 28.0)),
+                  _PreviewMedia(
+                    images: _images,
+                    videoPath: _videoPath,
+                    fontScale: fontScale,
+                    isDark: isDark,
+                    isWarm: isWarm,
                   ),
                 ],
+                SizedBox(height: (24 * fontScale).clamp(20.0, 28.0)),
+                // Large action buttons for elderly users
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _LargeActionButton(
+                            icon: Icons.photo_outlined,
+                            label: 'Add Photo',
+                            onTap: _pickImages,
+                            fontScale: fontScale,
+                            isDark: isDark,
+                            isWarm: isWarm,
+                          ),
+                        ),
+                        SizedBox(width: (12 * fontScale).clamp(10.0, 16.0)),
+                        Expanded(
+                          child: _LargeActionButton(
+                            icon: Icons.videocam_outlined,
+                            label: 'Add Video',
+                            onTap: _pickVideo,
+                            fontScale: fontScale,
+                            isDark: isDark,
+                            isWarm: isWarm,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: (12 * fontScale).clamp(10.0, 16.0)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _LargeActionButton(
+                            icon: Icons.fiber_manual_record_outlined,
+                            label: 'Record Video',
+                            onTap: () async {
+                              final path = await Navigator.of(context).push<String>(
+                                MaterialPageRoute(builder: (_) => const VideoRecordingScreen()),
+                              );
+                              if (path != null && mounted) {
+                                setState(() => _videoPath = path);
+                              }
+                            },
+                            fontScale: fontScale,
+                            isDark: isDark,
+                            isWarm: isWarm,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                SizedBox(height: (24 * fontScale).clamp(20.0, 28.0)),
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            vertical: (18 * fontScale).clamp(16.0, 22.0),
+                          ),
+                          side: BorderSide(
+                            color: isDark 
+                                ? Colors.white.withOpacity(0.3)
+                                : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          L10n.cancel,
+                          style: TextStyle(
+                            fontSize: (18 * fontScale).clamp(16.0, 22.0),
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: (16 * fontScale).clamp(12.0, 20.0)),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          widget.onSubmit(_controller.text.trim(), List<String>.from(_images), _videoPath);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brand,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(
+                            vertical: (18 * fontScale).clamp(16.0, 22.0),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: Text(
+                          L10n.post,
+                          style: TextStyle(
+                            fontSize: (18 * fontScale).clamp(16.0, 22.0),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LargeActionButton extends StatelessWidget {
+  const _LargeActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.fontScale,
+    required this.isDark,
+    required this.isWarm,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final double fontScale;
+  final bool isDark;
+  final bool isWarm;
+
+  @override
+  Widget build(BuildContext context) {
+    Color buttonColor = isDark 
+        ? Colors.white.withOpacity(0.1)
+        : (isWarm ? const Color(0xFFF5E6D3) : AppColors.surface);
+    Color borderColor = isDark 
+        ? Colors.white.withOpacity(0.2)
+        : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline);
+    Color textColor = isDark 
+        ? Colors.white 
+        : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary);
+    Color iconColor = isDark 
+        ? Colors.white70 
+        : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.all((16 * fontScale).clamp(14.0, 20.0)),
+          decoration: BoxDecoration(
+            color: buttonColor,
+            border: Border.all(color: borderColor, width: 1.5),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: (28 * fontScale).clamp(24.0, 32.0),
+                color: iconColor,
+              ),
+              SizedBox(width: (12 * fontScale).clamp(10.0, 16.0)),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: (18 * fontScale).clamp(16.0, 22.0),
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -511,66 +727,88 @@ class _ComposerSheetState extends State<_ComposerSheet> {
   }
 }
 
-class _ChipButton extends StatelessWidget {
-  const _ChipButton({required this.icon, required this.label, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.outline),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: AppColors.textSecondary),
-            const SizedBox(width: 8),
-            Text(label, style: Theme.of(context).textTheme.labelLarge),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PreviewMedia extends StatelessWidget {
-  const _PreviewMedia({required this.images, required this.videoPath});
+  const _PreviewMedia({
+    required this.images,
+    required this.videoPath,
+    required this.fontScale,
+    required this.isDark,
+    required this.isWarm,
+  });
 
   final List<String> images;
   final String? videoPath;
+  final double fontScale;
+  final bool isDark;
+  final bool isWarm;
 
   @override
   Widget build(BuildContext context) {
+    Color borderColor = isDark 
+        ? Colors.white.withOpacity(0.2)
+        : (isWarm ? const Color(0xFFD4C4B0) : AppColors.outline);
+    Color textColor = isDark 
+        ? Colors.white 
+        : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (images.isNotEmpty)
-          _ImagesPreviewRemovable(imagePathsOrUrls: images),
+        if (images.isNotEmpty) ...[
+          Text(
+            'Selected Photos (${images.length})',
+            style: TextStyle(
+              fontSize: (18 * fontScale).clamp(16.0, 22.0),
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+          SizedBox(height: (12 * fontScale).clamp(10.0, 16.0)),
+          _ImagesPreviewRemovable(
+            imagePathsOrUrls: images,
+            fontScale: fontScale,
+            isDark: isDark,
+            isWarm: isWarm,
+          ),
+        ],
         if (videoPath != null) ...[
-          const SizedBox(height: Spacing.sm),
+          if (images.isNotEmpty) SizedBox(height: (16 * fontScale).clamp(12.0, 20.0)),
+          Text(
+            'Selected Video',
+            style: TextStyle(
+              fontSize: (18 * fontScale).clamp(16.0, 22.0),
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+          SizedBox(height: (12 * fontScale).clamp(10.0, 16.0)),
           Container(
-            height: 140,
+            height: (200 * fontScale).clamp(180.0, 240.0),
             decoration: BoxDecoration(
-              color: AppColors.outline.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.outline),
+              color: isDark 
+                  ? Colors.white.withOpacity(0.1)
+                  : (isWarm ? const Color(0xFFD4C4B0).withOpacity(0.3) : AppColors.outline.withOpacity(0.15)),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor, width: 1.5),
             ),
             alignment: Alignment.center,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.videocam_rounded),
-                SizedBox(width: 8),
-                Text('Video attached'),
+              children: [
+                Icon(
+                  Icons.videocam_rounded,
+                  size: (32 * fontScale).clamp(28.0, 36.0),
+                  color: textColor,
+                ),
+                SizedBox(width: (12 * fontScale).clamp(10.0, 16.0)),
+                Text(
+                  'Video attached',
+                  style: TextStyle(
+                    fontSize: (18 * fontScale).clamp(16.0, 22.0),
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
               ],
             ),
           ),
@@ -581,9 +819,17 @@ class _PreviewMedia extends StatelessWidget {
 }
 
 class _ImagesPreviewRemovable extends StatefulWidget {
-  const _ImagesPreviewRemovable({required this.imagePathsOrUrls});
+  const _ImagesPreviewRemovable({
+    required this.imagePathsOrUrls,
+    required this.fontScale,
+    required this.isDark,
+    required this.isWarm,
+  });
 
   final List<String> imagePathsOrUrls;
+  final double fontScale;
+  final bool isDark;
+  final bool isWarm;
 
   @override
   State<_ImagesPreviewRemovable> createState() => _ImagesPreviewRemovableState();
@@ -598,45 +844,177 @@ class _ImagesPreviewRemovableState extends State<_ImagesPreviewRemovable> {
 
   @override
   Widget build(BuildContext context) {
+    // For single image, show large preview. For multiple, show grid
+    final imageSize = widget.imagePathsOrUrls.length == 1
+        ? (280 * widget.fontScale).clamp(250.0, 320.0)
+        : (120 * widget.fontScale).clamp(100.0, 140.0);
+    
+    Color borderColor = widget.isDark 
+        ? Colors.white.withOpacity(0.2)
+        : (widget.isWarm ? const Color(0xFFD4C4B0) : AppColors.outline);
+
+    if (widget.imagePathsOrUrls.length == 1) {
+      // Single large image preview
+      final String pathOrUrl = widget.imagePathsOrUrls[0];
+      final bool isNetwork = Uri.tryParse(pathOrUrl)?.hasScheme == true &&
+          (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://'));
+      
+      return Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            height: imageSize,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor, width: 1.5),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: isNetwork
+                  ? Image.network(
+                      pathOrUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) => Container(
+                        color: widget.isDark 
+                            ? Colors.white.withOpacity(0.1)
+                            : (widget.isWarm ? const Color(0xFFD4C4B0).withOpacity(0.3) : AppColors.outline.withOpacity(0.2)),
+                        child: Icon(
+                          Icons.broken_image,
+                          size: (48 * widget.fontScale).clamp(40.0, 56.0),
+                          color: widget.isDark 
+                              ? Colors.white60 
+                              : (widget.isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
+                        ),
+                      ),
+                    )
+                  : Image.file(
+                      File(pathOrUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) => Container(
+                        color: widget.isDark 
+                            ? Colors.white.withOpacity(0.1)
+                            : (widget.isWarm ? const Color(0xFFD4C4B0).withOpacity(0.3) : AppColors.outline.withOpacity(0.2)),
+                        child: Icon(
+                          Icons.broken_image,
+                          size: (48 * widget.fontScale).clamp(40.0, 56.0),
+                          color: widget.isDark 
+                              ? Colors.white60 
+                              : (widget.isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+          Positioned(
+            top: (12 * widget.fontScale).clamp(10.0, 16.0),
+            right: (12 * widget.fontScale).clamp(10.0, 16.0),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _removeAt(0),
+                borderRadius: BorderRadius.circular((20 * widget.fontScale).clamp(18.0, 24.0)),
+                child: Container(
+                  width: (40 * widget.fontScale).clamp(36.0, 44.0),
+                  height: (40 * widget.fontScale).clamp(36.0, 44.0),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.close,
+                    size: (24 * widget.fontScale).clamp(20.0, 28.0),
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Multiple images - show in grid
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: (12 * widget.fontScale).clamp(10.0, 16.0),
+      runSpacing: (12 * widget.fontScale).clamp(10.0, 16.0),
       children: List<Widget>.generate(widget.imagePathsOrUrls.length, (index) {
         final String pathOrUrl = widget.imagePathsOrUrls[index];
         final bool isNetwork = Uri.tryParse(pathOrUrl)?.hasScheme == true &&
             (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://'));
-        final Widget imageWidget = isNetwork
-            ? Image.network(
-                pathOrUrl,
-                width: 72,
-                height: 72,
-                fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
-              )
-            : Image.file(
-                File(pathOrUrl),
-                width: 72,
-                height: 72,
-                fit: BoxFit.cover,
-              );
+        
         return Stack(
           children: [
-            ClipRRect(borderRadius: BorderRadius.circular(8), child: imageWidget),
+            Container(
+              width: imageSize,
+              height: imageSize,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor, width: 1.5),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: isNetwork
+                    ? Image.network(
+                        pathOrUrl,
+                        width: imageSize,
+                        height: imageSize,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
+                          color: widget.isDark 
+                              ? Colors.white.withOpacity(0.1)
+                              : (widget.isWarm ? const Color(0xFFD4C4B0).withOpacity(0.3) : AppColors.outline.withOpacity(0.2)),
+                          child: Icon(
+                            Icons.broken_image,
+                            size: (32 * widget.fontScale).clamp(28.0, 36.0),
+                            color: widget.isDark 
+                                ? Colors.white60 
+                                : (widget.isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
+                          ),
+                        ),
+                      )
+                    : Image.file(
+                        File(pathOrUrl),
+                        width: imageSize,
+                        height: imageSize,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
+                          color: widget.isDark 
+                              ? Colors.white.withOpacity(0.1)
+                              : (widget.isWarm ? const Color(0xFFD4C4B0).withOpacity(0.3) : AppColors.outline.withOpacity(0.2)),
+                          child: Icon(
+                            Icons.broken_image,
+                            size: (32 * widget.fontScale).clamp(28.0, 36.0),
+                            color: widget.isDark 
+                                ? Colors.white60 
+                                : (widget.isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
+                          ),
+                        ),
+                      ),
+              ),
+            ),
             Positioned(
-              top: 2,
-              right: 2,
-              child: InkWell(
-                onTap: () => _removeAt(index),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(10),
+              top: (8 * widget.fontScale).clamp(6.0, 10.0),
+              right: (8 * widget.fontScale).clamp(6.0, 10.0),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _removeAt(index),
+                  borderRadius: BorderRadius.circular((18 * widget.fontScale).clamp(16.0, 20.0)),
+                  child: Container(
+                    width: (36 * widget.fontScale).clamp(32.0, 40.0),
+                    height: (36 * widget.fontScale).clamp(32.0, 40.0),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.close,
+                      size: (20 * widget.fontScale).clamp(18.0, 24.0),
+                      color: Colors.white,
+                    ),
                   ),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.close, size: 14, color: Colors.white),
                 ),
               ),
             ),

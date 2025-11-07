@@ -15,10 +15,11 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   DateTime? _lastBackPressedAt;
+  final GlobalKey<CommunityWallScreenState> _communityKey = GlobalKey<CommunityWallScreenState>();
 
-  final List<Widget> _pages = [
+  List<Widget> get _pages => [
     const NewsHomeScreen(),
-    const CommunityWallScreen(),
+    CommunityWallScreen(key: _communityKey),
     const ChatListScreen(),
     const ProfileScreen(),
   ];
@@ -71,6 +72,10 @@ class _HomeShellState extends State<HomeShell> {
         bottomNavigationBar: AccessibleBottomNav(
           currentIndex: _index,
           onTap: (i) => setState(() => _index = i),
+          onAddTap: () {
+            // Open the composer from community screen
+            _communityKey.currentState?.openComposer();
+          },
         ),
       ),
     );

@@ -3,13 +3,20 @@
 
 /// Base URL for the API. Keep this as a single source of truth.
 /// Example: https://api.example.com
-String apiBaseUrl = 'http://10.21.1.181:4000';
+String apiBaseUrl = 'http://192.168.29.186:4000';
 
 /// Helpers for building endpoint URLs from the base.
 class Endpoints {
   static String sendOtp() => '$apiBaseUrl/auth/otp/send';
   static String verifyOtp() => '$apiBaseUrl/auth/otp/verify';
+  static String getProfile(String userId) => '$apiBaseUrl/api/v1/profiles/$userId';
   static String updateProfile(String userId) => '$apiBaseUrl/api/v1/profiles/$userId';
+  static String getUserPosts(String userId, {int? limit}) {
+    final params = <String>[];
+    if (limit != null) params.add('limit=$limit');
+    final query = params.isEmpty ? '' : '?${params.join('&')}';
+    return '$apiBaseUrl/api/v1/profiles/$userId/posts$query';
+  }
   static String getNews() => '$apiBaseUrl/api/v1/news';
   static String createThought() => '$apiBaseUrl/api/v1/thoughts';
   static String getThoughts() => '$apiBaseUrl/api/v1/thoughts';
