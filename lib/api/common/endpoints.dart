@@ -3,7 +3,7 @@
 
 /// Base URL for the API. Keep this as a single source of truth.
 /// Example: https://api.example.com
-String apiBaseUrl = 'http://10.21.8.236:4000';
+String apiBaseUrl = 'http://10.21.1.181:4000';
 
 /// Helpers for building endpoint URLs from the base.
 class Endpoints {
@@ -20,4 +20,36 @@ class Endpoints {
   static String createCommunityPostV2() => '$apiBaseUrl/api/v1/community-v2/posts';
   static String getCommunityPostsV2() => '$apiBaseUrl/api/v1/community-v2/posts';
   static String mediaV2Stream({required String type, required String fileId}) => '$apiBaseUrl/api/v1/media-v2/$type/$fileId/stream';
+
+  // Chat endpoints
+  static String createConversation() => '$apiBaseUrl/api/v1/chats/conversations';
+  static String listConversations({String? userId, int? limit}) {
+    final params = <String>[];
+    if (userId != null) {
+      params.add('userId=${Uri.encodeComponent(userId)}');
+    }
+    if (limit != null) {
+      params.add('limit=$limit');
+    }
+    final query = params.isEmpty ? '' : '?${params.join('&')}';
+    return '$apiBaseUrl/api/v1/chats/conversations$query';
+  }
+
+  static String getConversation(String id) =>
+      '$apiBaseUrl/api/v1/chats/conversations/$id';
+
+  static String listMessages(String conversationId, {int? limit, String? before}) {
+    final params = <String>[];
+    if (limit != null) params.add('limit=$limit');
+    if (before != null) params.add('before=$before');
+    final query = params.isEmpty ? '' : '?${params.join('&')}';
+    return '$apiBaseUrl/api/v1/chats/conversations/$conversationId/messages$query';
+  }
+
+  static String sendMessage(String conversationId) =>
+      '$apiBaseUrl/api/v1/chats/conversations/$conversationId/messages';
+
+  static String updateReceipt(String messageId) =>
+      '$apiBaseUrl/api/v1/chats/messages/${Uri.encodeComponent(messageId)}/receipt';
+
 }

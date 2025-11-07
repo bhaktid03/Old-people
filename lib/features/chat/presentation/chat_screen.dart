@@ -2,16 +2,22 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/colors.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../widgets/mic_dictation_button.dart';
-import '../data/fake_chat_repository.dart';
+import '../../../core/session/session_manager.dart';
+import '../../../api/chats/chats_repository.dart';
+import '../../../api/chats/models/conversation.dart';
+import '../../../api/chats/models/message.dart' as api_models;
+import '../data/conversation_adapter.dart';
 import '../data/user_model.dart';
 import '../data/chat_message_model.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
+    required this.conversation,
     required this.user,
   });
 
+  final Conversation conversation;
   final ChatUser user;
 
   @override
@@ -19,17 +25,36 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final FakeChatRepository _repository = FakeChatRepository();
+  final ChatsRepository _repository = ChatsRepository();
+  final SessionManager _session = SessionManager();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
-  final String _currentUserId = 'current'; // In real app, get from auth
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _session.init();
+    _currentUserId = _session.userId;
+    if (_currentUserId != null) {
+      await _loadMessages();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to view messages'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   @override
@@ -40,12 +65,41 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadMessages() async {
-    final messages = await _repository.getMessages(widget.user.id);
-    setState(() {
-      _messages = messages;
-      _isLoading = false;
-    });
-    _scrollToBottom();
+    if (_currentUserId == null) return;
+
+    try {
+      final apiMessages = await _repository.listMessages(
+        conversationId: widget.conversation.id,
+        limit: 50,
+      );
+
+      // Convert API messages to UI messages
+      final messages = apiMessages.map((apiMsg) {
+        return ConversationAdapter.apiMessageToUiMessage(
+          apiMsg,
+          _currentUserId!,
+          widget.user.id,
+        );
+      }).toList();
+
+      setState(() {
+        _messages = messages;
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load messages: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _scrollToBottom() {
@@ -61,6 +115,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
+    if (_currentUserId == null) return;
+    
     final content = _messageController.text.trim();
     if (content.isEmpty) return;
 
@@ -70,7 +126,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
     final optimisticMessage = ChatMessage(
       id: tempId,
-      senderId: _currentUserId,
+      senderId: _currentUserId!,
       receiverId: widget.user.id,
       content: content,
       timestamp: DateTime.now(),
@@ -82,23 +138,43 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToBottom();
 
-    // Send to repository (simulate API call)
-    await _repository.sendMessage(
-      receiverId: widget.user.id,
-      content: content,
-    );
+    try {
+      // Send to API
+      final apiMessage = await _repository.sendMessage(
+        conversationId: widget.conversation.id,
+        senderId: _currentUserId!,
+        type: api_models.MessageType.text,
+        text: content,
+      );
 
-    // Reload to get updated messages with real ID
-    final updatedMessages = await _repository.getMessages(widget.user.id);
-    
-    // Replace optimistic message with real one from server
-    setState(() {
-      // Remove temp message
-      _messages.removeWhere((m) => m.id == tempId);
-      // Add all messages from server (which includes the new one)
-      _messages = updatedMessages;
-    });
-    _scrollToBottom();
+      // Convert API message to UI message
+      final uiMessage = ConversationAdapter.apiMessageToUiMessage(
+        apiMessage,
+        _currentUserId!,
+        widget.user.id,
+      );
+
+      // Replace optimistic message with real one from server
+      setState(() {
+        _messages.removeWhere((m) => m.id == tempId);
+        _messages.add(uiMessage);
+      });
+      _scrollToBottom();
+    } catch (e) {
+      // Remove optimistic message on error
+      setState(() {
+        _messages.removeWhere((m) => m.id == tempId);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   String _formatTime(DateTime timestamp) {

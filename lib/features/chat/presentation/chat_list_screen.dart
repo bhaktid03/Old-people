@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/colors.dart';
 import '../../../app/theme/spacing.dart';
 import '../../../core/localization/l10n.dart';
-import '../data/fake_chat_repository.dart';
+import '../../../core/session/session_manager.dart';
+import '../../../api/chats/chats_repository.dart';
+import '../../../api/chats/models/conversation.dart';
+import '../data/conversation_adapter.dart';
 import '../data/user_model.dart';
 import 'chat_screen.dart';
 
@@ -14,39 +17,86 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  final FakeChatRepository _repository = FakeChatRepository();
-  List<ChatUser> _users = [];
+  final ChatsRepository _repository = ChatsRepository();
+  final SessionManager _session = SessionManager();
+  List<Conversation> _conversations = [];
+  Map<String, ChatUser> _conversationUsers = {}; // Map conversationId -> ChatUser
   bool _isLoading = true;
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    _initialize();
   }
 
-  Future<void> _loadUsers() async {
-    final users = await _repository.getChatUsers();
-    setState(() {
-      _users = users;
-      _isLoading = false;
-    });
+  Future<void> _initialize() async {
+    await _session.init();
+    _currentUserId = _session.userId;
+    if (_currentUserId != null) {
+      await _loadConversations();
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  String _getLastMessagePreview(String userId) {
-    final lastMessage = _repository.getLastMessage(userId);
-    if (lastMessage == null) return 'No messages yet';
-    return lastMessage.content;
+  Future<void> _loadConversations() async {
+    if (_currentUserId == null) return;
+
+    try {
+      final conversations = await _repository.listConversations(
+        userId: _currentUserId!,
+        limit: 50,
+      );
+
+      // Convert conversations to ChatUsers for display
+      final conversationUsers = <String, ChatUser>{};
+      for (final conversation in conversations) {
+        final chatUser = ConversationAdapter.conversationToChatUser(
+          conversation,
+          _currentUserId!,
+        );
+        if (chatUser != null) {
+          conversationUsers[conversation.id] = chatUser;
+        }
+      }
+
+      setState(() {
+        _conversations = conversations;
+        _conversationUsers = conversationUsers;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load conversations: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  String _getLastMessageTime(String userId) {
-    final lastMessage = _repository.getLastMessage(userId);
-    if (lastMessage == null) return '';
+  String _getLastMessagePreview(Conversation conversation) {
+    if (conversation.lastMessageId == null) return 'No messages yet';
+    // TODO: Could fetch last message text if needed
+    return 'Tap to view messages';
+  }
+
+  String _getLastMessageTime(Conversation conversation) {
+    if (conversation.lastMessageAt == null) return '';
     
     final now = DateTime.now();
-    final difference = now.difference(lastMessage.timestamp);
+    final difference = now.difference(conversation.lastMessageAt!);
 
     if (difference.inDays > 7) {
-      return '${lastMessage.timestamp.day}/${lastMessage.timestamp.month}';
+      return '${conversation.lastMessageAt!.day}/${conversation.lastMessageAt!.month}';
     } else if (difference.inDays > 0) {
       return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {
@@ -82,7 +132,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _users.isEmpty
+          : _conversations.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -103,34 +153,224 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  onRefresh: _loadUsers,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
-                    itemCount: _users.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: Spacing.xs),
-                    itemBuilder: (context, index) {
-                    final user = _users[index];
-                    final unreadCount = _repository.getUnreadCount(user.id);
-                    final lastMessage = _getLastMessagePreview(user.id);
-                    final lastTime = _getLastMessageTime(user.id);
-
-                    return _ChatListItem(
-                      user: user,
-                      lastMessage: lastMessage,
-                      lastTime: lastTime,
-                      unreadCount: unreadCount,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(user: user),
+                  onRefresh: _loadConversations,
+                  child: _conversations.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 64,
+                                color: AppColors.textMuted,
+                              ),
+                              const SizedBox(height: Spacing.md),
+                              Text(
+                                'No chats yet',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                              ),
+                            ],
                           ),
-                        );
-                        },
-                      );
-                    },
-                  ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+                          itemCount: _conversations.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: Spacing.xs),
+                          itemBuilder: (context, index) {
+                            final conversation = _conversations[index];
+                            final user = _conversationUsers[conversation.id];
+                            if (user == null) return const SizedBox.shrink();
+
+                            final lastMessage = _getLastMessagePreview(conversation);
+                            final lastTime = _getLastMessageTime(conversation);
+                            // TODO: Calculate unread count from receipts
+                            final unreadCount = 0;
+
+                            return _ChatListItem(
+                              user: user,
+                              lastMessage: lastMessage,
+                              lastTime: lastTime,
+                              unreadCount: unreadCount,
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ChatScreen(
+                                      conversation: conversation,
+                                      user: user,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
                 ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showNewChatDialog,
+        backgroundColor: AppColors.brand,
+        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        tooltip: 'New chat',
+      ),
     );
+  }
+
+  Future<void> _showNewChatDialog() async {
+    final phoneController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Chat'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: phoneController,
+            decoration: InputDecoration(
+              labelText: 'Phone Number or User ID',
+              hintText: 'Enter phone number (e.g., +919876543210)',
+              prefixIcon: const Icon(Icons.person_add),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            keyboardType: TextInputType.phone,
+            textCapitalization: TextCapitalization.none,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter a phone number or user ID';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(context).pop(true);
+              }
+            },
+            child: const Text('Start Chat'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && phoneController.text.trim().isNotEmpty) {
+      await _createNewConversation(phoneController.text.trim());
+    }
+  }
+
+  Future<void> _createNewConversation(String otherUserId) async {
+    if (_currentUserId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to start a chat'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Normalize phone number (remove spaces, ensure it starts with +)
+    String normalizedId = otherUserId.replaceAll(RegExp(r'\s+'), '');
+    if (!normalizedId.startsWith('+') && !normalizedId.startsWith('91')) {
+      // If it doesn't start with + or 91, assume it's a phone number and add +
+      if (normalizedId.length == 10) {
+        normalizedId = '+91$normalizedId';
+      } else if (!normalizedId.startsWith('+')) {
+        normalizedId = '+$normalizedId';
+      }
+    }
+
+    // Check if conversation already exists
+    Conversation? existingConversation;
+    try {
+      existingConversation = _conversations.firstWhere(
+        (conv) {
+          if (conv.type == ConversationType.solo) {
+            return conv.memberIds.contains(normalizedId) &&
+                conv.memberIds.contains(_currentUserId!);
+          }
+          return false;
+        },
+      );
+    } catch (_) {
+      // No existing conversation found
+      existingConversation = null;
+    }
+
+    try {
+      Conversation conversation;
+
+      if (existingConversation != null && existingConversation.id.isNotEmpty) {
+        // Conversation already exists, use it
+        conversation = existingConversation;
+      } else {
+        // Create new conversation
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Creating conversation...'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+
+        conversation = await _repository.createConversation(
+          type: ConversationType.solo,
+          memberIds: [_currentUserId!, normalizedId],
+        );
+      }
+
+      // Convert to ChatUser for navigation
+      final chatUser = ConversationAdapter.conversationToChatUser(
+        conversation,
+        _currentUserId!,
+      );
+
+      if (chatUser != null && mounted) {
+        // Navigate to chat screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              conversation: conversation,
+              user: chatUser,
+            ),
+          ),
+        );
+
+        // Refresh the list to include the new conversation
+        await _loadConversations();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to create conversation'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create conversation: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

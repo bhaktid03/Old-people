@@ -153,6 +153,7 @@ class ApiClient {
       if (responseBody.isEmpty) return <String, dynamic>{};
       final dynamic decoded = jsonDecode(responseBody);
       if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is List) return <String, dynamic>{'data': decoded};
       return <String, dynamic>{'data': decoded};
     }
 
