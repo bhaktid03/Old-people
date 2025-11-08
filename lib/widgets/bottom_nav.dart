@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:livekit_client/livekit_client.dart';
 import 'package:newseva/app.dart';
+import 'package:newseva/voice_assistant_wrapper.dart';
 import '../app/theme/colors.dart';
 import '../core/localization/l10n.dart';
 import '../core/accessibility/accessibility_manager.dart';
@@ -101,14 +104,42 @@ class _AccessibleBottomNavState extends State<AccessibleBottomNav> {
                 isSelected: widget.currentIndex == 99, // doesn't matter, no tab switching needed
                 isDark: isDark,
                 fontScale: fontScale,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const VoiceAssistantApp(),
-                    ),
+                onTap: () async {
+  // Show loading loader before opening
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) => const Center(child: CircularProgressIndicator()),
+                );
+
+                try {
+                  // Load ENV only when voice button clicked
+                  await dotenv.load(fileName: ".env");
+
+                  // Initialize LiveKit
+                  await LiveKitClient.initialize();
+                } catch (e) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Voice assistant init failed: $e")),
                   );
-                },
+                  return;
+                }
+
+                // Remove loader
+                Navigator.pop(context);
+
+                // Now open Voice Assistant
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const VoiceAssistantWrapper(),
+                  ),
+                );
+
+
+              },
+
               ),
 
               // Add button in the middle

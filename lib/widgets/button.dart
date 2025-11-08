@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Button shown when disconnected to start a new conversation
 class Button extends StatelessWidget {
+  final String text;
   final VoidCallback onPressed;
   final bool isProgressing;
-  final String text;
 
   const Button({
     super.key,
@@ -14,37 +13,47 @@ class Button extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext ctx) => TextButton(
-        onPressed: isProgressing ? null : onPressed,
-        style: TextButton.styleFrom(
-          backgroundColor: Theme.of(ctx).buttonTheme.colorScheme?.surface,
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          backgroundColor: Colors.transparent, // container outside controls color
           foregroundColor: Colors.white,
-          // surfaceTintColor: Colors.white,
-          disabledForegroundColor: Colors.white,
-          // disabledIconColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+          shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: Row(
-          spacing: 15,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isProgressing)
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
+
+        // Disable if progressing
+        onPressed: isProgressing ? null : onPressed,
+
+        child: isProgressing
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.3,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text("Connecting..."),
+                ],
+              )
+            : Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            Text(
-              text.toUpperCase(),
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      );
+      ),
+    );
+  }
 }
