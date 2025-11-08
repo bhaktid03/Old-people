@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:newseva/app.dart';
 import '../app/theme/colors.dart';
 import '../core/localization/l10n.dart';
 import '../core/accessibility/accessibility_manager.dart';
@@ -93,6 +94,23 @@ class _AccessibleBottomNavState extends State<AccessibleBottomNav> {
                 fontScale: fontScale,
                 onTap: () => widget.onTap(1),
               ),
+              _NavItem(
+                icon: Icons.mic_none,
+                selectedIcon: Icons.mic,
+                label: "Voice",
+                isSelected: widget.currentIndex == 99, // doesn't matter, no tab switching needed
+                isDark: isDark,
+                fontScale: fontScale,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const VoiceAssistantApp(),
+                    ),
+                  );
+                },
+              ),
+
               // Add button in the middle
               _AddButton(
                 isDark: isDark,
