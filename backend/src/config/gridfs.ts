@@ -4,6 +4,7 @@ import { getDb } from "./mongo.js";
 let audioBucket: GridFSBucket | null = null;
 let videoBucket: GridFSBucket | null = null;
 let imageBucket: GridFSBucket | null = null;
+let mediaBucket: GridFSBucket | null = null;
 
 export function getAudioBucket(): GridFSBucket {
   if (!audioBucket) {
@@ -27,6 +28,14 @@ export function getImageBucket(): GridFSBucket {
     imageBucket = new GridFSBucket(db, { bucketName: process.env.GRIDFS_IMAGE_BUCKET || "image" });
   }
   return imageBucket;
+}
+
+export function getMediaBucket(): GridFSBucket {
+  if (!mediaBucket) {
+    const db = getDb();
+    mediaBucket = new GridFSBucket(db, { bucketName: process.env.GRIDFS_MEDIA_BUCKET || "media" });
+  }
+  return mediaBucket;
 }
 
 

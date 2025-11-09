@@ -5,24 +5,32 @@ import { ensureThoughtsIndexes } from "./features/thoughts/thoughts.repo.js";
 
 async function main() {
   const env = loadEnv();
+  await connectMongo(env.MONGODB_URI, env.DB_NAME);
   
-  // Try to connect to MongoDB, but allow server to start even if it fails
-  try {
-    await connectMongo(env.MONGODB_URI, env.DB_NAME);
-    // Initialize database indexes
-    await ensureThoughtsIndexes();
-  } catch (error) {
-    console.error("⚠️  MongoDB connection failed. Server will start but database features won't work.");
-    console.error("   Fix MongoDB connection to enable full functionality.");
-    console.error("   See backend/FIX_MONGODB.md for troubleshooting.");
-  }
+  // Initialize database indexes
+  await ensureThoughtsIndexes();
   
   const app = createApp();
   const port = Number(env.PORT || 4000);
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`✅ Server listening on :${port}`);
-    console.log(`   Health check: http://localhost:${port}/healthz`);
+    console.log(`server listening on :${port}`);
+  });
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      // eslint-disable-next-line no-console
+      console.error(`Port ${port} is already in use. Please either:`);
+      // eslint-disable-next-line no-console
+      console.error(`  1. Stop the process using port ${port}`);
+      // eslint-disable-next-line no-console
+      console.error(`  2. Set a different PORT in your .env file`);
+      process.exit(1);
+    } else {
+      // eslint-disable-next-line no-console
+      console.error('Server error:', err);
+      process.exit(1);
+    }
   });
 }
 

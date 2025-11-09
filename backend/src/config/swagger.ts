@@ -6,7 +6,9 @@ dotenv.config();
 
 // Get port from environment or use default 4000 (matching server.ts)
 const PORT = process.env.PORT || '4000';
-const serverUrl = `http://localhost:${PORT}`;
+// Support custom server URL via environment variable (useful for forwarded ports/dev tunnels)
+const customServerUrl = process.env.SWAGGER_SERVER_URL || process.env.PUBLIC_URL;
+const serverUrl = customServerUrl || `http://localhost:${PORT}`;
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -25,32 +27,6 @@ const options: swaggerJsdoc.Options = {
         description: 'Development server',
       },
     ],
-    tags: [
-      {
-        name: 'Thoughts',
-        description: 'Thoughts/comments on news articles',
-      },
-      {
-        name: 'Media',
-        description: 'Media file upload and streaming',
-      },
-      {
-        name: 'News',
-        description: 'News articles and feeds',
-      },
-      {
-        name: 'Users',
-        description: 'User authentication and management',
-      },
-      {
-        name: 'Profiles',
-        description: 'User profiles',
-      },
-      {
-        name: 'Chats',
-        description: 'Chat conversations and messages',
-      },
-    ],
     components: {
       schemas: {
         User: {
@@ -64,6 +40,52 @@ const options: swaggerJsdoc.Options = {
             updatedAt: { type: 'string', format: 'date-time' },
           },
           required: ['_id', 'createdAt', 'updatedAt']
+        },
+        CommunityAuthor: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            displayName: { type: 'string' },
+            imageUrl: { type: 'string', format: 'uri' },
+          },
+          required: ['userId']
+        },
+        CommunityPost: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            author: { $ref: '#/components/schemas/CommunityAuthor' },
+            text: { type: 'string' },
+            media: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['image','video','audio'] },
+                  url: { type: 'string', format: 'uri' },
+                  mimeType: { type: 'string' }
+                },
+                required: ['type','url']
+              }
+            },
+            likeUserIds: { type: 'array', items: { type: 'string' } },
+            commentsCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id','author','createdAt','updatedAt']
+        },
+        CommunityComment: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            postId: { type: 'string' },
+            author: { $ref: '#/components/schemas/CommunityAuthor' },
+            text: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['_id','postId','author','text','createdAt','updatedAt']
         },
         Conversation: {
           type: 'object',
@@ -96,11 +118,11 @@ const options: swaggerJsdoc.Options = {
             _id: { type: 'string' },
             conversationId: { type: 'string' },
             senderId: { type: 'string', description: 'Profile _id (E.164 phone)', example: '+919876543210' },
-            type: { type: 'string', enum: ['text', 'image', 'voice'] },
-            text: { type: 'string' },
-            mediaUrl: { type: 'string', format: 'uri' },
-            mediaMimeType: { type: 'string' },
-            voiceDurationMs: { type: 'integer' },
+            type: { type: 'string', enum: ['text', 'image', 'voice', 'media'], description: 'Message type. Use "media" for any file type (images, videos, documents, etc.)' },
+            text: { type: 'string', description: 'Message text (optional for media messages)' },
+            mediaUrl: { type: 'string', format: 'uri', description: 'URL to the media file. For uploaded files, this will be in the format /api/v1/media/{fileId}/stream' },
+            mediaMimeType: { type: 'string', description: 'MIME type of the media file (e.g., image/jpeg, video/mp4, application/pdf)' },
+            voiceDurationMs: { type: 'integer', description: 'Duration in milliseconds for voice messages' },
             receipts: { type: 'array', items: { $ref: '#/components/schemas/MessageReceipt' } },
             editedAt: { type: 'string', format: 'date-time' },
             deletedAt: { type: 'string', format: 'date-time' },
@@ -125,36 +147,10 @@ const options: swaggerJsdoc.Options = {
         MediaUploadResponse: {
           type: 'object',
           properties: {
-            fileId: { type: 'string', description: 'GridFS file ID for streaming' },
-            contentType: { type: 'string', description: 'MIME type of the uploaded file' },
-            sizeBytes: { type: 'integer', description: 'Size of the file in bytes' },
-            thoughtId: { type: 'string', nullable: true, description: 'Thought id if provided during upload (for news thoughts)' },
-            communityThoughtId: { type: 'string', nullable: true, description: 'Community thought id if provided during upload (for community thoughts)' },
-            communityId: { type: 'string', nullable: true, description: 'Community id if provided as context during upload' },
-          },
-          examples: {
-            audioUpload: {
-              summary: 'Audio upload response',
-              value: {
-                fileId: '66ff1c1e2f1a4d1f9e6b1234',
-                contentType: 'audio/mpeg',
-                sizeBytes: 1024000,
-                thoughtId: null,
-                communityThoughtId: 'ct_01HF3...',
-                communityId: 'community_1223',
-              },
-            },
-            videoUpload: {
-              summary: 'Video upload response',
-              value: {
-                fileId: '66ff1c1e2f1a4d1f9e6b5678',
-                contentType: 'video/mp4',
-                sizeBytes: 5120000,
-                thoughtId: 't_01HF3...',
-                communityThoughtId: null,
-                communityId: 'community_9876',
-              },
-            },
+            fileId: { type: 'string' },
+            contentType: { type: 'string' },
+            sizeBytes: { type: 'integer' },
+            thoughtId: { type: 'string', nullable: true, description: 'Thought id if provided during upload' },
           },
         },
         Thought: {
