@@ -51,6 +51,9 @@ class ConversationAdapter {
       timestamp: apiMessage.createdAt ?? DateTime.now(),
       isRead: apiMessage.getReceiptForUser(currentUserId)?.isSeen ?? false,
       messageType: _mapMessageType(apiMessage.type),
+      mediaUrl: apiMessage.mediaUrl,
+      mediaMimeType: apiMessage.mediaMimeType,
+      voiceDurationMs: apiMessage.voiceDurationMs,
     );
   }
 

@@ -2,16 +2,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../../app/theme/spacing.dart';
+import '../../../app/theme/colors.dart';
 import '../../../core/localization/l10n.dart';
+import '../../../core/accessibility/accessibility_manager.dart';
 import '../../../widgets/share_thoughts_modal.dart';
 import '../../../widgets/text_input_screen.dart';
 import '../../../widgets/audio_recording_screen.dart';
 import '../../../widgets/video_recording_screen.dart';
 import '../data/viewer_thought_model.dart';
 import '../../../widgets/viewer_thought_card.dart';
+import '../../../widgets/highlighted_text.dart';
 import '../data/headline_model.dart';
 import '../../../services/audio_player_service.dart';
 import '../../../services/voice_interpret_service.dart';
+import '../../../services/tts_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../api/thoughts/thoughts_repository.dart';
 import '../../../core/session/session_manager.dart';
@@ -32,9 +36,22 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   final AudioPlayerService _player = AudioPlayerService();
   final ThoughtsRepository _thoughtsRepository = ThoughtsRepository();
   final SessionManager _sessionManager = SessionManager();
+  final TtsService _ttsService = TtsService();
   String? _playingId;
   bool _isUploading = false;
   bool _isLoadingThoughts = false;
+  bool _isTtsPlaying = false;
+  bool _isTtsPaused = false;
+  String? _highlightedWord;
+  int? _highlightStartOffset;
+  int? _highlightEndOffset;
+  String _fullTextToRead = '';
+  
+  // Track text section boundaries for accurate highlighting
+  int _titleEnd = 0;
+  int _sourceStart = 0;
+  int _sourceEnd = 0;
+  int _summaryStart = 0;
 
   Future<void> _loadThoughts() async {
     if (widget.headline.url == null || widget.headline.url!.isEmpty) {
@@ -129,12 +146,70 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         await _player.stop();
       }
     });
+
+    // Set up TTS callbacks to update UI
+    _ttsService.onStart = () {
+      if (mounted) {
+        setState(() {
+          _isTtsPlaying = true;
+          _isTtsPaused = false;
+          _highlightedWord = null;
+          _highlightStartOffset = null;
+          _highlightEndOffset = null;
+        });
+      }
+    };
+    _ttsService.onComplete = () {
+      if (mounted) {
+        setState(() {
+          _isTtsPlaying = false;
+          _isTtsPaused = false;
+          _highlightedWord = null;
+          _highlightStartOffset = null;
+          _highlightEndOffset = null;
+        });
+      }
+    };
+    _ttsService.onStop = () {
+      if (mounted) {
+        setState(() {
+          _isTtsPlaying = false;
+          _isTtsPaused = false;
+          _highlightedWord = null;
+          _highlightStartOffset = null;
+          _highlightEndOffset = null;
+        });
+      }
+    };
+    // Set up word update callback for highlighting
+    _ttsService.onWordUpdate = (String word, int startOffset, int endOffset) {
+      if (mounted) {
+        // Clean the word - remove leading/trailing punctuation and whitespace
+        // This ensures we only highlight the actual word content
+        final cleanedWord = word.trim().replaceAll(RegExp(r'^[^\w\u0900-\u097F]+|[^\w\u0900-\u097F]+$', unicode: true), '');
+        
+        setState(() {
+          // Only update if we have a valid word (not just punctuation/whitespace)
+          if (cleanedWord.isNotEmpty) {
+            _highlightedWord = cleanedWord;
+            _highlightStartOffset = startOffset;
+            _highlightEndOffset = endOffset;
+          } else {
+            // Clear highlight if word is empty/invalid
+            _highlightedWord = null;
+            _highlightStartOffset = null;
+            _highlightEndOffset = null;
+          }
+        });
+      }
+    };
   }
 
   @override
   void dispose() {
     _playerStateSubscription?.cancel();
     _positionSubscription?.cancel();
+    _ttsService.stop();
     super.dispose();
   }
 
@@ -153,27 +228,13 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(Spacing.md),
-        child: SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _announce(context, 'Listening to article'),
-                  icon: const Icon(Icons.volume_up_rounded),
-                  label: Text(L10n.listen),
-                ),
-              ),
-              const SizedBox(width: Spacing.md),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _showShareThoughtsModal(context),
-                  icon: const Icon(Icons.mic_rounded),
-                  label: Text(L10n.shareYourThoughts),
-                ),
-              ),
-            ],
-          ),
+        child: _ModernActionButtons(
+          isTtsPlaying: _isTtsPlaying,
+          isTtsPaused: _isTtsPaused,
+          onListen: _isTtsPlaying || _isTtsPaused
+              ? () => _handleTtsToggle()
+              : () => _handleListenButton(),
+          onShareThoughts: () => _showShareThoughtsModal(context),
         ),
       ),
       body: SafeArea(
@@ -194,24 +255,61 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           child: ListView(
           padding: const EdgeInsets.all(Spacing.md),
           children: [
-            Text(
-              widget.headline.title,
+            // Title with highlighting support (offset-based matching)
+            HighlightedText(
+              text: widget.headline.title,
+              highlightedWord: _isTtsPlaying && _getSectionForOffset(_highlightStartOffset ?? -1) == 'title' 
+                  ? _highlightedWord 
+                  : null,
+              highlightStartOffset: _getSectionForOffset(_highlightStartOffset ?? -1) == 'title'
+                  ? _getSectionRelativeOffset(_highlightStartOffset, 'title')
+                  : null,
+              highlightEndOffset: _getSectionForOffset(_highlightEndOffset ?? -1) == 'title'
+                  ? _getSectionRelativeOffset(_highlightEndOffset, 'title')
+                  : null,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
+              highlightColor: Colors.yellow.withOpacity(0.5),
             ),
             const SizedBox(height: Spacing.md),
             Row(
               children: [
                 const Icon(Icons.newspaper_rounded, size: 20),
                 const SizedBox(width: 8),
-                Text(widget.headline.source, style: Theme.of(context).textTheme.bodyMedium),
+                // Source with highlighting support (offset-based matching)
+                Expanded(
+                  child: HighlightedText(
+                    text: widget.headline.source,
+                    highlightedWord: _isTtsPlaying && _getSectionForOffset(_highlightStartOffset ?? -1) == 'source' 
+                        ? _highlightedWord 
+                        : null,
+                    highlightStartOffset: _getSectionForOffset(_highlightStartOffset ?? -1) == 'source'
+                        ? _getSectionRelativeOffset(_highlightStartOffset, 'source')
+                        : null,
+                    highlightEndOffset: _getSectionForOffset(_highlightEndOffset ?? -1) == 'source'
+                        ? _getSectionRelativeOffset(_highlightEndOffset, 'source')
+                        : null,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    highlightColor: Colors.yellow.withOpacity(0.5),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: Spacing.md),
-            Text(
-              // Placeholder long body; will be replaced by content from API later
-              '${widget.headline.summary}\n\n${widget.headline.summary}\n\n${widget.headline.summary}',
+            // Summary with highlighting support (offset-based matching)
+            HighlightedText(
+              text: widget.headline.summary ?? '',
+              highlightedWord: _isTtsPlaying && _getSectionForOffset(_highlightStartOffset ?? -1) == 'summary' 
+                  ? _highlightedWord 
+                  : null,
+              highlightStartOffset: _getSectionForOffset(_highlightStartOffset ?? -1) == 'summary'
+                  ? _getSectionRelativeOffset(_highlightStartOffset, 'summary')
+                  : null,
+              highlightEndOffset: _getSectionForOffset(_highlightEndOffset ?? -1) == 'summary'
+                  ? _getSectionRelativeOffset(_highlightEndOffset, 'summary')
+                  : null,
               style: Theme.of(context).textTheme.bodyLarge,
+              highlightColor: Colors.yellow.withOpacity(0.5),
             ),
             const SizedBox(height: 24),
             // Thoughts By Viewers section
@@ -299,6 +397,168 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// Gets the full text content to be read aloud
+  /// Also calculates section boundaries for accurate highlighting
+  String _getTextToRead() {
+    final buffer = StringBuffer();
+    
+    // Add title
+    buffer.write(widget.headline.title);
+    _titleEnd = buffer.length;
+    buffer.writeln();
+    buffer.writeln();
+    
+    // Add source information (just the source name for cleaner TTS)
+    if (widget.headline.source.isNotEmpty) {
+      _sourceStart = buffer.length;
+      buffer.write(widget.headline.source);
+      _sourceEnd = buffer.length;
+      buffer.writeln();
+      buffer.writeln();
+    } else {
+      _sourceStart = _titleEnd;
+      _sourceEnd = _titleEnd;
+    }
+    
+    // Add summary (read once, not repeated)
+    if (widget.headline.summary != null && widget.headline.summary!.isNotEmpty) {
+      _summaryStart = buffer.length;
+      buffer.write(widget.headline.summary!);
+    } else {
+      _summaryStart = _sourceEnd;
+    }
+    
+    return buffer.toString().trim();
+  }
+  
+  /// Determines which section a highlight offset falls into
+  /// Returns: 'title', 'source', 'summary', or null
+  /// Offsets are relative to the full text (including newlines between sections)
+  String? _getSectionForOffset(int offset) {
+    if (offset < 0) return null;
+    
+    // Title section: from start to end of title (before newlines)
+    if (offset < _titleEnd) {
+      return 'title';
+    }
+    
+    // Source section: from source start to source end (before newlines)
+    // Note: _sourceStart includes the newlines after title
+    if (_sourceStart > 0 && offset >= _sourceStart && offset < _sourceEnd) {
+      return 'source';
+    }
+    
+    // Summary section: from summary start to end
+    // Note: _summaryStart includes the newlines after source
+    if (_summaryStart > 0 && offset >= _summaryStart) {
+      return 'summary';
+    }
+    
+    return null;
+  }
+  
+  /// Calculates the offset within a section (relative to that section's text)
+  /// Accounts for newlines that were added between sections in the full text
+  int? _getSectionRelativeOffset(int? fullTextOffset, String section) {
+    if (fullTextOffset == null || fullTextOffset < 0) return null;
+    
+    switch (section) {
+      case 'title':
+        // Title starts at 0, so offset is already relative
+        return fullTextOffset.clamp(0, widget.headline.title.length);
+      
+      case 'source':
+        // Source starts at _sourceStart in full text
+        // Need to account for newlines: _sourceStart = _titleEnd + 2 newlines
+        if (_sourceStart > 0) {
+          final relativeOffset = (fullTextOffset - _sourceStart).clamp(0, widget.headline.source.length);
+          return relativeOffset;
+        }
+        return null;
+      
+      case 'summary':
+        // Summary starts at _summaryStart in full text
+        // Need to account for newlines: _summaryStart = _sourceEnd + 2 newlines
+        if (_summaryStart > 0 && widget.headline.summary != null) {
+          final relativeOffset = (fullTextOffset - _summaryStart).clamp(0, widget.headline.summary!.length);
+          return relativeOffset;
+        }
+        return null;
+      
+      default:
+        return null;
+    }
+  }
+
+  /// Handles the Listen button press - starts TTS
+  Future<void> _handleListenButton() async {
+    try {
+      final textToRead = _getTextToRead();
+      if (textToRead.isEmpty) {
+        _announce(context, 'No content available to read');
+        return;
+      }
+
+      // Store the full text for highlighting
+      _fullTextToRead = textToRead;
+
+      // Stop any currently playing audio thoughts to avoid conflicts
+      if (_playingId != null) {
+        await _player.stop();
+      }
+
+      // Clear previous highlights
+      if (mounted) {
+        setState(() {
+          _highlightedWord = null;
+          _highlightStartOffset = null;
+          _highlightEndOffset = null;
+        });
+      }
+
+      // Start TTS
+      await _ttsService.speak(
+        textToRead,
+        headlineLanguage: widget.headline.language,
+      );
+    } catch (e) {
+      print('Error starting TTS: $e');
+      if (mounted) {
+        _announce(context, 'Error reading article: $e');
+      }
+    }
+  }
+
+  /// Handles TTS toggle (pause/resume)
+  Future<void> _handleTtsToggle() async {
+    try {
+      if (_isTtsPaused) {
+        // Resume
+        await _ttsService.resume();
+        if (mounted) {
+          setState(() {
+            _isTtsPlaying = true;
+            _isTtsPaused = false;
+          });
+        }
+      } else if (_isTtsPlaying) {
+        // Pause
+        await _ttsService.pause();
+        if (mounted) {
+          setState(() {
+            _isTtsPaused = true;
+            _isTtsPlaying = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error toggling TTS: $e');
+      if (mounted) {
+        _announce(context, 'Error controlling playback: $e');
+      }
+    }
   }
 
   void _showShareThoughtsModal(BuildContext context) async {
@@ -557,6 +817,244 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           break;
       }
     }
+  }
+}
+
+class _ModernActionButtons extends StatelessWidget {
+  const _ModernActionButtons({
+    required this.isTtsPlaying,
+    required this.isTtsPaused,
+    required this.onListen,
+    required this.onShareThoughts,
+  });
+
+  final bool isTtsPlaying;
+  final bool isTtsPaused;
+  final VoidCallback onListen;
+  final VoidCallback onShareThoughts;
+
+  @override
+  Widget build(BuildContext context) {
+    final accessibilityManager = AccessibilityManager();
+    final fontScale = accessibilityManager.fontScale;
+    final isDark = accessibilityManager.isDarkMode;
+    final isWarm = accessibilityManager.isWarmMode;
+
+    return Container(
+      padding: EdgeInsets.all((16 * fontScale).clamp(12.0, 20.0)),
+      decoration: BoxDecoration(
+        color: isDark 
+            ? const Color(0xFF1E1E1E)
+            : (isWarm ? const Color(0xFFF9F0E6) : Colors.white),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ModernButton(
+              onPressed: onListen,
+              icon: isTtsPlaying
+                  ? Icons.pause_circle_filled_rounded
+                  : isTtsPaused
+                      ? Icons.play_circle_filled_rounded
+                      : Icons.headphones_rounded,
+              label: isTtsPlaying
+                  ? L10n.pause
+                  : isTtsPaused
+                      ? L10n.play
+                      : L10n.listen,
+              isPrimary: true,
+              fontScale: fontScale,
+              isDark: isDark,
+              isWarm: isWarm,
+            ),
+          ),
+          SizedBox(width: (16 * fontScale).clamp(12.0, 20.0)),
+          Expanded(
+            child: _ModernButton(
+              onPressed: onShareThoughts,
+              icon: Icons.mic_rounded,
+              label: L10n.thoughtsQ,
+              isPrimary: false,
+              fontScale: fontScale,
+              isDark: isDark,
+              isWarm: isWarm,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModernButton extends StatefulWidget {
+  const _ModernButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    required this.isPrimary,
+    required this.fontScale,
+    required this.isDark,
+    required this.isWarm,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String label;
+  final bool isPrimary;
+  final double fontScale;
+  final bool isDark;
+  final bool isWarm;
+
+  @override
+  State<_ModernButton> createState() => _ModernButtonState();
+}
+
+class _ModernButtonState extends State<_ModernButton> with SingleTickerProviderStateMixin {
+  bool _isPressed = false;
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 100),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final buttonHeight = (64 * widget.fontScale).clamp(56.0, 72.0);
+    final iconSize = (28 * widget.fontScale).clamp(24.0, 32.0);
+    final fontSize = (16 * widget.fontScale).clamp(14.0, 20.0);
+    final borderRadius = 16.0;
+
+    Color backgroundColor;
+    Color foregroundColor;
+    Color borderColor;
+    List<BoxShadow> shadows;
+
+    if (widget.isPrimary) {
+      // Primary button (Listen) - gradient style
+      backgroundColor = AppColors.brand;
+      foregroundColor = Colors.white;
+      borderColor = AppColors.brandDark;
+      shadows = [
+        BoxShadow(
+          color: AppColors.brand.withOpacity(0.4),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+        BoxShadow(
+          color: Colors.black.withOpacity(0.1),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ];
+    } else {
+      // Secondary button (Share Thoughts)
+      backgroundColor = widget.isDark
+          ? Colors.white.withOpacity(0.15)
+          : (widget.isWarm ? const Color(0xFFF5E6D3) : Colors.white);
+      foregroundColor = widget.isDark
+          ? Colors.white
+          : (widget.isWarm ? const Color(0xFF4A3A2A) : AppColors.brand);
+      borderColor = widget.isDark
+          ? Colors.white.withOpacity(0.3)
+          : (widget.isWarm ? const Color(0xFFD4C4B0) : AppColors.brand.withOpacity(0.3));
+      shadows = [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.08),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ];
+    }
+
+    return GestureDetector(
+      onTapDown: (_) {
+        setState(() => _isPressed = true);
+        _controller.forward();
+      },
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        _controller.reverse();
+        widget.onPressed();
+      },
+      onTapCancel: () {
+        setState(() => _isPressed = false);
+        _controller.reverse();
+      },
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          height: buttonHeight,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(
+              color: borderColor,
+              width: widget.isPrimary ? 0 : 1.5,
+            ),
+            boxShadow: shadows,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onPressed,
+              borderRadius: BorderRadius.circular(borderRadius),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (20 * widget.fontScale).clamp(16.0, 24.0),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      widget.icon,
+                      size: iconSize,
+                      color: foregroundColor,
+                    ),
+                    SizedBox(width: (12 * widget.fontScale).clamp(10.0, 16.0)),
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.w600,
+                          color: foregroundColor,
+                          letterSpacing: 0.3,
+                        ),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -25,34 +25,8 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
   final SessionManager _session = SessionManager();
   final CommunityPostsApi _communityPostsApi = CommunityPostsApi();
   bool _isLoading = false;
-  final List<_Post> _posts = [
-    _Post(
-      userName: 'Asha',
-      text: 'Morning walk was refreshing! 🌄 Stay active everyone.',
-      imageUrls: [
-        'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee',
-        'https://images.unsplash.com/photo-1441974231531-c6227db76b6e',
-      ],
-      likes: 12,
-      comments: 4,
-      createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-    ),
-    _Post(
-      userName: 'Ramesh',
-      text: 'Sharing my favorite old song as a video memory 💿',
-      videoPath: null,
-      likes: 23,
-      comments: 7,
-      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-    ),
-    _Post(
-      userName: 'Meera',
-      text: 'Any tips for growing tulsi at home? 🌱',
-      likes: 8,
-      comments: 12,
-      createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
-    ),
-  ];
+  bool _isPosting = false;
+  final List<_Post> _posts = [];
 
   Future<void> _refresh() async {
     await _loadPosts();
@@ -70,7 +44,14 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
     if (!silent) setState(() => _isLoading = true);
     try {
       final List<Map<String, dynamic>> raw = await _communityPostsApi.getV2Posts(limit: 20);
-      final List<_Post> mapped = raw.map<_Post>((Map<String, dynamic> p) {
+      
+      // Create a map to track posts by ID to prevent duplicates
+      final Map<String, _Post> postsMap = <String, _Post>{};
+      
+      for (final Map<String, dynamic> p in raw) {
+        final String postId = (p['_id'] ?? p['id'] ?? '').toString();
+        if (postId.isEmpty) continue; // Skip posts without ID
+        
         final Map<String, dynamic>? author = p['author'] as Map<String, dynamic>?;
         final String userName = (author?['displayName'] ?? author?['userId'] ?? 'User').toString();
         final String text = (p['text'] ?? '').toString();
@@ -98,7 +79,8 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
         final dynamic likesDyn = p['likes'];
         final dynamic commentsDyn = p['comments'];
 
-        return _Post(
+        postsMap[postId] = _Post(
+          id: postId,
           userName: userName,
           text: text,
           imageUrls: imageUrls,
@@ -107,13 +89,13 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
           comments: commentsDyn is num ? commentsDyn.toInt() : 0,
           createdAt: DateTime.tryParse((p['createdAt'] ?? DateTime.now().toIso8601String()).toString()) ?? DateTime.now(),
         );
-      }).toList();
+      }
 
       if (!mounted) return;
       setState(() {
-        _posts
-          ..clear()
-          ..addAll(mapped);
+        // Clear and replace with fresh data to prevent mixing
+        _posts.clear();
+        _posts.addAll(postsMap.values);
       });
     } catch (e) {
       if (!mounted) return;
@@ -152,6 +134,13 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
               return;
             }
 
+            // Show posting indicator
+            if (mounted) {
+              setState(() {
+                _isPosting = true;
+              });
+            }
+
             try {
               final List<File> imageFiles = images
                   .where((p) => p.isNotEmpty && File(p).existsSync())
@@ -162,39 +151,42 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
                 videoFiles.add(File(videoPath));
               }
 
-              final Map<String, dynamic> created = await _communityPostsApi.createV2Post(
+              // Create the post
+              await _communityPostsApi.createV2Post(
                 userId: userId,
                 text: text,
                 images: imageFiles,
                 videos: videoFiles,
               );
 
-              UiUtils.showTopSnackBar(context: ctx, message: 'Posted successfully', isSuccess: true);
+              // Wait for the refresh to complete to ensure accurate data
+              await _loadPosts(silent: false);
 
-              // Optimistically add to UI; use returned data if needed
-              setState(() {
-                _posts.insert(
-                  0,
-                  _Post(
-                    userName: 'You',
-                    text: text,
-                    imageUrls: images,
-                    videoPath: videoPath,
-                    likes: 0,
-                    comments: 0,
-                    createdAt: DateTime.now(),
-                  ),
-                );
-                _segment = 1;
-              });
-               // Refresh in background without showing loader
-               _loadPosts(silent: true);
+              // Switch to recent segment to show the new post
+              if (mounted) {
+                setState(() {
+                  _segment = 1;
+                });
+              }
+
+              // Show success message after refresh completes
+              if (mounted) {
+                UiUtils.showTopSnackBar(context: ctx, message: 'Posted successfully', isSuccess: true);
+              }
             } catch (e) {
-              UiUtils.showTopSnackBar(
-                context: ctx,
-                message: UiUtils.friendlyErrorMessage(e),
-                isError: true,
-              );
+              if (mounted) {
+                UiUtils.showTopSnackBar(
+                  context: ctx,
+                  message: UiUtils.friendlyErrorMessage(e),
+                  isError: true,
+                );
+              }
+            } finally {
+              if (mounted) {
+                setState(() {
+                  _isPosting = false;
+                });
+              }
             }
           },
         );
@@ -205,9 +197,14 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
   @override
   Widget build(BuildContext context) {
     final List<_Post> visiblePosts = List<_Post>.from(_posts)
-      ..sort((a, b) => _segment == 0
-          ? (b.score).compareTo(a.score) // trending by score
-          : b.createdAt.compareTo(a.createdAt)); // recent by time
+      ..sort((a, b) {
+        // Primary sort based on segment
+        final int primary = _segment == 0
+            ? (b.score).compareTo(a.score) // trending by score
+            : b.createdAt.compareTo(a.createdAt); // recent by time
+        // Secondary sort by ID for stability
+        return primary != 0 ? primary : a.id.compareTo(b.id);
+      });
 
     return Scaffold(
       appBar: AppBar(
@@ -239,7 +236,7 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
                   ),
                   const SizedBox(height: Spacing.sm),
                   _InlineComposer(onTap: openComposer),
-                  if (_isLoading) ...[
+                  if (_isLoading || _isPosting) ...[
                     const SizedBox(height: Spacing.md),
                     const LinearProgressIndicator(minHeight: 2),
                   ],
@@ -249,6 +246,7 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
             const SizedBox(height: Spacing.md),
             for (final p in visiblePosts)
               Padding(
+                key: ValueKey(p.id),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: CommunityPostCard(
                   userName: p.userName,
@@ -1027,6 +1025,7 @@ class _ImagesPreviewRemovableState extends State<_ImagesPreviewRemovable> {
 
 class _Post {
   _Post({
+    required this.id,
     required this.userName,
     required this.text,
     this.imageUrls = const [],
@@ -1036,6 +1035,7 @@ class _Post {
     required this.createdAt,
   });
 
+  final String id;
   final String userName;
   final String text;
   final List<String> imageUrls;
@@ -1046,5 +1046,3 @@ class _Post {
 
   int get score => likes * 2 + comments; // simplistic trending score
 }
-
-

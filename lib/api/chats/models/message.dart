@@ -49,6 +49,17 @@ class ChatApiMessage {
     }
   }
 
+  /// Parse voiceDurationMs which can be int, string, or null
+  static int? _parseVoiceDurationMs(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) {
+      if (value.isEmpty) return null;
+      return int.tryParse(value);
+    }
+    return null;
+  }
+
   factory ChatApiMessage.fromJson(Map<String, dynamic> json) {
     return ChatApiMessage(
       id: json['_id']?.toString() ?? json['id'].toString(),
@@ -61,7 +72,7 @@ class ChatApiMessage {
       text: json['text'] as String?,
       mediaUrl: json['mediaUrl'] as String?,
       mediaMimeType: json['mediaMimeType'] as String?,
-      voiceDurationMs: json['voiceDurationMs'] as int?,
+      voiceDurationMs: _parseVoiceDurationMs(json['voiceDurationMs']),
       receipts: (json['receipts'] as List<dynamic>?)
               ?.map((e) => MessageReceipt.fromJson(e as Map<String, dynamic>))
               .toList() ??

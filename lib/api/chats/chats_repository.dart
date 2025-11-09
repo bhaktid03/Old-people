@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'chats_api.dart';
 import 'models/conversation.dart';
 import 'models/message.dart';
@@ -58,6 +59,7 @@ class ChatsRepository {
     String? mediaUrl,
     String? mediaMimeType,
     int? voiceDurationMs,
+    File? mediaFile,
   }) =>
       _api.sendMessage(
         conversationId: conversationId,
@@ -67,6 +69,7 @@ class ChatsRepository {
         mediaUrl: mediaUrl,
         mediaMimeType: mediaMimeType,
         voiceDurationMs: voiceDurationMs,
+        mediaFile: mediaFile,
       );
 
   /// Update delivery/read receipts

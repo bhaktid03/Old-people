@@ -1,9 +1,9 @@
 // Centralized API endpoints and base URL configuration
-// Update `apiBaseUrl` to point to your backend.
+// Update apiBaseUrl to point to your backend.
 
 /// Base URL for the API. Keep this as a single source of truth.
 /// Example: https://api.example.com
-String apiBaseUrl = 'http://192.168.29.186:4000';
+String apiBaseUrl = 'https://w3f4lpt9-4000.inc1.devtunnels.ms';
 
 /// Helpers for building endpoint URLs from the base.
 class Endpoints {
@@ -58,5 +58,19 @@ class Endpoints {
 
   static String updateReceipt(String messageId) =>
       '$apiBaseUrl/api/v1/chats/messages/${Uri.encodeComponent(messageId)}/receipt';
+
+  // Media streaming endpoint
+  static String getMediaStream(String mediaUrl) {
+    // If mediaUrl is already a full URL, return it
+    if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+      return mediaUrl;
+    }
+    // If mediaUrl is a path like /api/v1/media/{id}/stream, prepend base URL
+    if (mediaUrl.startsWith('/')) {
+      return '$apiBaseUrl$mediaUrl';
+    }
+    // Otherwise, use the media stream endpoint with query parameter
+    return '$apiBaseUrl/api/v1/chats/media/stream?mediaUrl=${Uri.encodeComponent(mediaUrl)}';
+  }
 
 }

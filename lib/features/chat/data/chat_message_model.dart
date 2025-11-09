@@ -7,6 +7,9 @@ class ChatMessage {
     required this.timestamp,
     this.isRead = false,
     this.messageType = MessageType.text,
+    this.mediaUrl,
+    this.mediaMimeType,
+    this.voiceDurationMs,
   });
 
   final String id;
@@ -16,8 +19,22 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isRead;
   final MessageType messageType;
+  final String? mediaUrl;
+  final String? mediaMimeType;
+  final int? voiceDurationMs;
 
   bool get isSent => senderId != receiverId; // In real app, compare with current user
+
+  /// Parse voiceDurationMs which can be int, string, or null
+  static int? _parseVoiceDurationMs(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) {
+      if (value.isEmpty) return null;
+      return int.tryParse(value);
+    }
+    return null;
+  }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
@@ -33,6 +50,9 @@ class ChatMessage {
         (e) => e.name == (json['messageType'] as String? ?? 'text'),
         orElse: () => MessageType.text,
       ),
+      mediaUrl: json['mediaUrl'] as String?,
+      mediaMimeType: json['mediaMimeType'] as String?,
+      voiceDurationMs: _parseVoiceDurationMs(json['voiceDurationMs']),
     );
   }
 
@@ -44,6 +64,9 @@ class ChatMessage {
         'timestamp': timestamp.toIso8601String(),
         'isRead': isRead,
         'messageType': messageType.name,
+        if (mediaUrl != null) 'mediaUrl': mediaUrl,
+        if (mediaMimeType != null) 'mediaMimeType': mediaMimeType,
+        if (voiceDurationMs != null) 'voiceDurationMs': voiceDurationMs,
       };
 }
 

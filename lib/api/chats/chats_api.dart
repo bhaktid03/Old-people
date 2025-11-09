@@ -1,3 +1,4 @@
+import 'dart:io';
 import '../client/api_client.dart';
 import '../common/endpoints.dart';
 import 'models/conversation.dart';
@@ -140,6 +141,7 @@ class ChatsApi {
 
   /// Send a message
   /// POST /api/v1/chats/conversations/{id}/messages
+  /// Supports both JSON (text-only) and multipart/form-data (with media)
   Future<ChatApiMessage> sendMessage({
     required String conversationId,
     required String senderId,
@@ -149,14 +151,34 @@ class ChatsApi {
     String? mediaMimeType,
     int? voiceDurationMs,
     String? messageId,
+    File? mediaFile,
   }) async {
-    // Generate a temporary ID if not provided
-    // The server will use this or generate its own
-    final id = messageId ?? 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    // If mediaFile is provided, use multipart/form-data
+    if (mediaFile != null) {
+      final fields = <String, String>{
+        'senderId': senderId,
+        'type': type.name,
+        if (text != null && text.isNotEmpty) 'text': text,
+        if (mediaMimeType != null && mediaMimeType.isNotEmpty)
+          'mediaMimeType': mediaMimeType,
+        if (voiceDurationMs != null) 'voiceDurationMs': voiceDurationMs.toString(),
+        // Send empty _id to let server auto-generate
+        '_id': '',
+      };
 
+      final response = await _client.postMultipart(
+        url: Endpoints.sendMessage(conversationId),
+        fields: fields,
+        file: mediaFile,
+        fileFieldName: 'media',
+        timeout: const Duration(seconds: 90), // Longer timeout for media uploads
+      );
+
+      return ChatApiMessage.fromJson(response);
+    }
+
+    // Otherwise, use JSON (text-only or when mediaUrl is already provided)
     final body = <String, dynamic>{
-      '_id': id,
-      'conversationId': conversationId,
       'senderId': senderId,
       'type': type.name,
       if (text != null && text.isNotEmpty) 'text': text,
@@ -164,6 +186,8 @@ class ChatsApi {
       if (mediaMimeType != null && mediaMimeType.isNotEmpty)
         'mediaMimeType': mediaMimeType,
       if (voiceDurationMs != null) 'voiceDurationMs': voiceDurationMs,
+      // Send empty _id to let server auto-generate
+      '_id': '',
     };
 
     final response = await _client.postJson(
