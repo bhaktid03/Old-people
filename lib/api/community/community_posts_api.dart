@@ -11,6 +11,8 @@ class CommunityPostsApi {
   Future<Map<String, dynamic>> createV2Post({
     required String userId,
     String? text,
+    String? displayName,
+    String? photoUrl,
     List<File> images = const <File>[],
     List<File> audios = const <File>[],
     List<File> videos = const <File>[],
@@ -18,6 +20,8 @@ class CommunityPostsApi {
     final Map<String, String> fields = <String, String>{
       'userId': userId,
       if (text != null && text.isNotEmpty) 'text': text,
+      if (displayName != null && displayName.isNotEmpty) 'displayName': displayName,
+      if (photoUrl != null && photoUrl.isNotEmpty) 'photoUrl': photoUrl,
     };
 
     final Map<String, List<File>> filesByField = <String, List<File>>{};

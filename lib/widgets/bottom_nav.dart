@@ -77,7 +77,7 @@ class _AccessibleBottomNavState extends State<AccessibleBottomNav> {
             vertical: (6 * fontScale).clamp(4.0, 8.0),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _NavItem(
                 icon: Icons.home_outlined,
@@ -97,6 +97,12 @@ class _AccessibleBottomNavState extends State<AccessibleBottomNav> {
                 fontScale: fontScale,
                 onTap: () => widget.onTap(1),
               ),
+              // Plus button in the middle
+              _AddButton(
+                isDark: isDark,
+                fontScale: fontScale,
+                onTap: widget.onAddTap ?? () {},
+              ),
               _NavItem(
                 icon: Icons.mic_none,
                 selectedIcon: Icons.mic,
@@ -105,48 +111,38 @@ class _AccessibleBottomNavState extends State<AccessibleBottomNav> {
                 isDark: isDark,
                 fontScale: fontScale,
                 onTap: () async {
-  // Show loading loader before opening
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (_) => const Center(child: CircularProgressIndicator()),
-                );
-
-                try {
-                  // Load ENV only when voice button clicked
-                  await dotenv.load(fileName: ".env");
-
-                  // Initialize LiveKit
-                  await LiveKitClient.initialize();
-                } catch (e) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Voice assistant init failed: $e")),
+                  // Show loading loader before opening
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
                   );
-                  return;
-                }
 
-                // Remove loader
-                Navigator.pop(context);
+                  try {
+                    // Load ENV only when voice button clicked
+                    await dotenv.load(fileName: ".env");
 
-                // Now open Voice Assistant
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const VoiceAssistantWrapper(),
-                  ),
-                );
+                    // Initialize LiveKit
+                    await LiveKitClient.initialize();
+                  } catch (e) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Voice assistant init failed: $e")),
+                    );
+                    return;
+                  }
 
+                  // Remove loader
+                  Navigator.pop(context);
 
-              },
-
-              ),
-
-              // Add button in the middle
-              _AddButton(
-                isDark: isDark,
-                fontScale: fontScale,
-                onTap: widget.onAddTap ?? () {},
+                  // Now open Voice Assistant
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const VoiceAssistantWrapper(),
+                    ),
+                  );
+                },
               ),
               _NavItem(
                 icon: Icons.chat_bubble_outline_rounded,
@@ -156,15 +152,6 @@ class _AccessibleBottomNavState extends State<AccessibleBottomNav> {
                 isDark: isDark,
                 fontScale: fontScale,
                 onTap: () => widget.onTap(2),
-              ),
-              _NavItem(
-                icon: Icons.person_outline_rounded,
-                selectedIcon: Icons.person_rounded,
-                label: L10n.profile,
-                isSelected: widget.currentIndex == 3,
-                isDark: isDark,
-                fontScale: fontScale,
-                onTap: () => widget.onTap(3),
               ),
             ],
           ),
@@ -195,45 +182,55 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconSize = (26 * fontScale).clamp(22.0, 30.0);
-    final fontSize = (11 * fontScale).clamp(10.0, 13.0);
+    final iconSize = (28 * fontScale).clamp(24.0, 32.0);
+    final fontSize = (12 * fontScale).clamp(10.0, 14.0);
 
     return Expanded(
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
+          borderRadius: BorderRadius.circular(16),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
             padding: EdgeInsets.symmetric(
-              horizontal: (6 * fontScale).clamp(4.0, 10.0),
-              vertical: (4 * fontScale).clamp(2.0, 6.0),
+              horizontal: (8 * fontScale).clamp(6.0, 12.0),
+              vertical: (6 * fontScale).clamp(4.0, 8.0),
             ),
             decoration: BoxDecoration(
               color: isSelected
                   ? (isDark 
-                      ? AppColors.brand.withOpacity(0.2)
-                      : AppColors.brand.withOpacity(0.12))
+                      ? AppColors.brand.withOpacity(0.25)
+                      : AppColors.brand.withOpacity(0.15))
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
+              border: isSelected
+                  ? Border.all(
+                      color: AppColors.brand.withOpacity(0.3),
+                      width: 1.5,
+                    )
+                  : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Flexible(
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
                   child: Icon(
                     isSelected ? selectedIcon : icon,
+                    key: ValueKey(isSelected),
                     size: iconSize,
                     color: isSelected
                         ? AppColors.brand
                         : (isDark 
-                            ? Colors.white.withOpacity(0.7)
+                            ? Colors.white.withOpacity(0.75)
                             : AppColors.textSecondary),
                   ),
                 ),
-                SizedBox(height: (4 * fontScale).clamp(2.0, 6.0)),
+                SizedBox(height: (5 * fontScale).clamp(3.0, 7.0)),
                 Flexible(
                   child: Text(
                     label,
@@ -242,14 +239,14 @@ class _NavItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: fontSize,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                       color: isSelected
                           ? AppColors.brand
                           : (isDark 
-                              ? Colors.white.withOpacity(0.7)
+                              ? Colors.white.withOpacity(0.75)
                               : AppColors.textSecondary),
-                      letterSpacing: 0.2,
-                      height: 1.0,
+                      letterSpacing: 0.3,
+                      height: 1.1,
                     ),
                   ),
                 ),
@@ -262,7 +259,7 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _AddButton extends StatelessWidget {
+class _AddButton extends StatefulWidget {
   const _AddButton({
     required this.isDark,
     required this.fontScale,
@@ -274,37 +271,71 @@ class _AddButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_AddButton> createState() => _AddButtonState();
+}
+
+class _AddButtonState extends State<_AddButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final buttonSize = (56 * fontScale).clamp(50.0, 64.0);
+    final buttonSize = (56 * widget.fontScale).clamp(50.0, 64.0);
     
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(buttonSize / 2),
-        child: Container(
-          width: buttonSize,
-          height: buttonSize,
-          decoration: BoxDecoration(
-            color: AppColors.brand,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.brand.withOpacity(0.4),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
+    return Expanded(
+      child: Center(
+        child: GestureDetector(
+          onTapDown: (_) => _controller.forward(),
+          onTapUp: (_) {
+            _controller.reverse();
+            widget.onTap();
+          },
+          onTapCancel: () => _controller.reverse(),
+          child: ScaleTransition(
+            scale: _scaleAnimation,
+            child: Container(
+              width: buttonSize,
+              height: buttonSize,
+              decoration: BoxDecoration(
+                color: AppColors.brand,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brand.withOpacity(0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Icon(
-            Icons.add,
-            color: Colors.white,
-            size: (32 * fontScale).clamp(28.0, 36.0),
+              child: Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: (32 * widget.fontScale).clamp(28.0, 36.0),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 }
-
 

@@ -11,7 +11,9 @@ import '../../../core/ui/ui_utils.dart';
 import '../../../core/session/session_manager.dart';
 import '../../../core/accessibility/accessibility_manager.dart';
 import '../../../api/community/community_posts_api.dart';
-import '../../../api/common/endpoints.dart';
+import '../../../api/common/endpoints.dart' show apiBaseUrl;
+import '../../../api/profiles/profiles_repository.dart';
+import '../../../api/profiles/models/profile.dart';
 
 class CommunityWallScreen extends StatefulWidget {
   const CommunityWallScreen({super.key});
@@ -24,9 +26,12 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
   int _segment = 0; // 0 = trending, 1 = recent
   final SessionManager _session = SessionManager();
   final CommunityPostsApi _communityPostsApi = CommunityPostsApi();
+  final ProfilesRepository _profilesRepository = ProfilesRepository();
   bool _isLoading = false;
   bool _isPosting = false;
   final List<_Post> _posts = [];
+  // Cache for profile data to avoid repeated API calls
+  final Map<String, Profile> _profileCache = {};
 
   Future<void> _refresh() async {
     await _loadPosts();
@@ -43,17 +48,168 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
   Future<void> _loadPosts({bool silent = false}) async {
     if (!silent) setState(() => _isLoading = true);
     try {
+      // Ensure session is initialized before accessing userId/displayName
+      await _session.init();
+      
       final List<Map<String, dynamic>> raw = await _communityPostsApi.getV2Posts(limit: 20);
       
       // Create a map to track posts by ID to prevent duplicates
       final Map<String, _Post> postsMap = <String, _Post>{};
+      
+      // Collect unique author IDs that need profile data
+      final Set<String> authorIdsToFetch = <String>{};
       
       for (final Map<String, dynamic> p in raw) {
         final String postId = (p['_id'] ?? p['id'] ?? '').toString();
         if (postId.isEmpty) continue; // Skip posts without ID
         
         final Map<String, dynamic>? author = p['author'] as Map<String, dynamic>?;
-        final String userName = (author?['displayName'] ?? author?['userId'] ?? 'User').toString();
+        final String authorId = (author?['userId'] ?? author?['_id'] ?? '').toString();
+        if (authorId.isNotEmpty) {
+          // Check if we need to fetch profile data
+          final String? displayName = author?['displayName'];
+          final String? imageUrl = author?['imageUrl'] ?? author?['photoUrl'] ?? author?['avatarUrl'];
+          
+          // If displayName or imageUrl is null, and we don't have it cached, fetch it
+          if ((displayName == null || imageUrl == null) && !_profileCache.containsKey(authorId)) {
+            // Check if it's the current user - use session data first
+            final currentUserId = _session.userId;
+            if (authorId == currentUserId) {
+              final sessionDisplayName = _session.displayName;
+              final sessionPhotoUrl = _session.photoUrl;
+              // For current user, still fetch profile to ensure we have latest photoUrl
+              // even if session has some data, as profile might have been updated
+              authorIdsToFetch.add(authorId);
+            } else {
+              authorIdsToFetch.add(authorId);
+            }
+          }
+        }
+      }
+      
+      // Fetch profiles for authors that need it
+      for (final String authorId in authorIdsToFetch) {
+        try {
+          final profile = await _profilesRepository.getProfile(authorId);
+          _profileCache[authorId] = profile;
+        } catch (e) {
+          print('Failed to fetch profile for $authorId: $e');
+          // Continue with other posts even if one profile fetch fails
+        }
+      }
+      
+      // Now process posts with profile data
+      for (final Map<String, dynamic> p in raw) {
+        final String postId = (p['_id'] ?? p['id'] ?? '').toString();
+        if (postId.isEmpty) continue; // Skip posts without ID
+        
+        final Map<String, dynamic>? author = p['author'] as Map<String, dynamic>?;
+        final String authorId = (author?['userId'] ?? author?['_id'] ?? '').toString();
+        
+        // Get displayName and photoUrl from various sources
+        String? displayName;
+        String? photoUrl;
+        
+        // Check if it's the current user - ALWAYS prioritize session data for current user
+        final currentUserId = _session.userId;
+        final bool isCurrentUser = authorId == currentUserId && currentUserId != null && currentUserId.isNotEmpty;
+        
+        // Debug: Log if we detect bad names
+        if (isCurrentUser) {
+          final apiDisplayName = author?['displayName'] as String?;
+          if (apiDisplayName != null && (apiDisplayName.toLowerCase().contains('grandpa') || apiDisplayName.toLowerCase().contains('ram'))) {
+            print('[CommunityWall] Warning: API returned bad displayName "$apiDisplayName" for current user. Using session data instead.');
+          }
+        }
+        
+        // Helper function to check if a name is a default/bad name that should be rejected
+        bool isBadDefaultName(String? name) {
+          if (name == null || name.isEmpty) return true;
+          final lower = name.toLowerCase().trim();
+          return lower == 'grandpa ram' || 
+                 lower == 'grandpa' || 
+                 lower == 'ram' ||
+                 lower == 'user' ||
+                 lower == 'anonymous' ||
+                 lower == 'unknown';
+        }
+        
+        if (isCurrentUser) {
+          // For current user's posts, ALWAYS use session data first (most up-to-date)
+          // Don't trust API response as it might have stale/wrong data like "grandpa ram"
+          displayName = _session.displayName;
+          photoUrl = _session.photoUrl;
+          
+          // Debug: Log session photoUrl
+          if (photoUrl != null && photoUrl.isNotEmpty) {
+            print('[CommunityWall] Current user photoUrl from session: $photoUrl');
+          } else {
+            print('[CommunityWall] Current user photoUrl is null/empty in session, will check API/cache');
+          }
+          
+          // Reject bad default names from session
+          if (isBadDefaultName(displayName)) {
+            displayName = null;
+          }
+          
+          // Only fallback to API/cache if session data is completely missing or bad
+          if (displayName == null || displayName.isEmpty) {
+            displayName = author?['displayName'] as String?;
+            // Reject bad default names from API
+            if (isBadDefaultName(displayName)) {
+              displayName = null;
+            }
+            final cachedProfile = _profileCache[authorId];
+            if ((displayName == null || displayName.isEmpty) && cachedProfile != null) {
+              displayName = cachedProfile.displayName;
+              // Reject bad default names from cache
+              if (isBadDefaultName(displayName)) {
+                displayName = null;
+              }
+            }
+          }
+          // For photoUrl, also check API/cache if session doesn't have it
+          if (photoUrl == null || photoUrl.isEmpty) {
+            photoUrl = author?['imageUrl'] ?? author?['photoUrl'] ?? author?['avatarUrl'];
+            if (photoUrl != null && photoUrl.isNotEmpty) {
+              print('[CommunityWall] Current user photoUrl from API: $photoUrl');
+            }
+            final cachedProfile = _profileCache[authorId];
+            if ((photoUrl == null || photoUrl.isEmpty) && cachedProfile != null) {
+              photoUrl = cachedProfile.photoUrl;
+              if (photoUrl != null && photoUrl.isNotEmpty) {
+                print('[CommunityWall] Current user photoUrl from cache: $photoUrl');
+              }
+            }
+          }
+        } else {
+          // For other users' posts, check API response first, then cache
+          displayName = author?['displayName'] as String?;
+          // Reject bad default names from API
+          if (isBadDefaultName(displayName)) {
+            displayName = null;
+          }
+          photoUrl = author?['imageUrl'] ?? author?['photoUrl'] ?? author?['avatarUrl'];
+          
+          // Finally check profile cache
+          final cachedProfile = _profileCache[authorId];
+          if ((displayName == null || displayName.isEmpty) && cachedProfile != null) {
+            displayName = cachedProfile.displayName;
+            // Reject bad default names from cache
+            if (isBadDefaultName(displayName)) {
+              displayName = null;
+            }
+          }
+          if ((photoUrl == null || photoUrl.isEmpty) && cachedProfile != null) {
+            photoUrl = cachedProfile.photoUrl;
+          }
+        }
+        
+        // Fallback to userId if no displayName or if displayName is a bad default name
+        // NEVER show default names like "User", "grandpa ram", etc.
+        final String userName = (!isBadDefaultName(displayName) && displayName != null && displayName.isNotEmpty) 
+            ? displayName 
+            : authorId;
         final String text = (p['text'] ?? '').toString();
 
         final List<String> imageUrls = <String>[];
@@ -79,10 +235,31 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
         final dynamic likesDyn = p['likes'];
         final dynamic commentsDyn = p['comments'];
 
+        // Build full avatar URL if available
+        String? avatarUrl;
+        final String? authorPhotoUrl = photoUrl;
+        if (authorPhotoUrl != null && authorPhotoUrl.isNotEmpty) {
+          // Check if it's already a full URL
+          if (authorPhotoUrl.startsWith('http://') || authorPhotoUrl.startsWith('https://')) {
+            avatarUrl = authorPhotoUrl;
+          } else {
+            // It's a relative path, prepend the base URL
+            // Ensure the path starts with / if it doesn't already
+            final String path = authorPhotoUrl.startsWith('/') ? authorPhotoUrl : '/$authorPhotoUrl';
+            avatarUrl = '$apiBaseUrl$path';
+          }
+          if (isCurrentUser) {
+            print('[CommunityWall] Built avatarUrl for current user: $avatarUrl');
+          }
+        } else if (isCurrentUser) {
+          print('[CommunityWall] No avatarUrl for current user - photoUrl was null/empty');
+        }
+        
         postsMap[postId] = _Post(
           id: postId,
           userName: userName,
           text: text,
+          avatarUrl: avatarUrl,
           imageUrls: imageUrls,
           videoPath: videoPath,
           likes: likesDyn is num ? likesDyn.toInt() : 0,
@@ -151,10 +328,16 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
                 videoFiles.add(File(videoPath));
               }
 
+              // Get displayName and photoUrl from session
+              final displayName = _session.displayName;
+              final photoUrl = _session.photoUrl;
+              
               // Create the post
               await _communityPostsApi.createV2Post(
                 userId: userId,
                 text: text,
+                displayName: displayName,
+                photoUrl: photoUrl,
                 images: imageFiles,
                 videos: videoFiles,
               );
@@ -251,6 +434,7 @@ class CommunityWallScreenState extends State<CommunityWallScreen> {
                 child: CommunityPostCard(
                   userName: p.userName,
                   text: p.text,
+                  avatar: p.avatarUrl != null ? NetworkImage(p.avatarUrl!) : null,
                   imageUrls: p.imageUrls,
                   videoPath: p.videoPath,
                   likes: p.likes,
@@ -1028,6 +1212,7 @@ class _Post {
     required this.id,
     required this.userName,
     required this.text,
+    this.avatarUrl,
     this.imageUrls = const [],
     this.videoPath,
     required this.likes,
@@ -1038,6 +1223,7 @@ class _Post {
   final String id;
   final String userName;
   final String text;
+  final String? avatarUrl;
   final List<String> imageUrls;
   final String? videoPath;
   final int likes;

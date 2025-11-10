@@ -61,14 +61,14 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Login with your phone',
+                      'Sign up with your phone',
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "We'll send you a one-time passcode",
+                      "We'll send you a one-time passcode to get started",
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -147,7 +147,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Send OTP'),
+                          : const Text('Sign Up'),
                     ),
                     const SizedBox(height: 12),
                     Text(

@@ -3,7 +3,7 @@
 
 /// Base URL for the API. Keep this as a single source of truth.
 /// Example: https://api.example.com
-String apiBaseUrl = 'https://w3f4lpt9-4000.inc1.devtunnels.ms';
+String apiBaseUrl = 'http://10.132.145.86:4000';
 
 /// Helpers for building endpoint URLs from the base.
 class Endpoints {
@@ -11,6 +11,7 @@ class Endpoints {
   static String verifyOtp() => '$apiBaseUrl/auth/otp/verify';
   static String getProfile(String userId) => '$apiBaseUrl/api/v1/profiles/$userId';
   static String updateProfile(String userId) => '$apiBaseUrl/api/v1/profiles/$userId';
+  static String deleteAccount(String userId) => '$apiBaseUrl/api/v1/profiles/$userId';
   static String getUserPosts(String userId, {int? limit}) {
     final params = <String>[];
     if (limit != null) params.add('limit=$limit');

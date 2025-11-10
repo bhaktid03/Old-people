@@ -10,6 +10,8 @@ import '../../../core/ui/ui_utils.dart';
 import '../../../api/common/endpoints.dart';
 import '../../../api/community/community_posts_api.dart';
 import '../../../core/accessibility/accessibility_manager.dart';
+import '../../../app/router.dart';
+import '../../../widgets/bottom_nav.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -102,13 +104,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final posts = allPostsData.map((json) {
         try {
+          // If author info is missing, inject profile data for current user's posts
+          final Map<String, dynamic>? author = json['author'] as Map<String, dynamic>?;
+          final Map<String, dynamic>? user = json['user'] as Map<String, dynamic>?;
+          final String authorId = (author?['userId'] ?? author?['_id'] ?? user?['userId'] ?? user?['_id'] ?? '').toString();
+          
+          if (authorId == userId) {
+            // This is the current user's post - inject profile data if missing
+            if (author != null) {
+              if (author['displayName'] == null && profile.displayName.isNotEmpty) {
+                author['displayName'] = profile.displayName;
+              }
+              if (author['imageUrl'] == null && profile.photoUrl != null && profile.photoUrl!.isNotEmpty) {
+                author['imageUrl'] = profile.photoUrl;
+              }
+            } else if (user != null) {
+              if (user['displayName'] == null && profile.displayName.isNotEmpty) {
+                user['displayName'] = profile.displayName;
+              }
+              if (user['imageUrl'] == null && profile.photoUrl != null && profile.photoUrl!.isNotEmpty) {
+                user['imageUrl'] = profile.photoUrl;
+              }
+            } else {
+              // Create author object if it doesn't exist
+              json['author'] = {
+                'userId': userId,
+                'displayName': profile.displayName,
+                'imageUrl': profile.photoUrl,
+              };
+            }
+          }
+          
           return _Post.fromJson(json);
         } catch (e) {
           print('[ProfileScreen] Error parsing post: $e, JSON: $json');
           // Return a default post to prevent crashes
+          // Try to get userId from the json for error case
+          final Map<String, dynamic>? errorAuthor = json['author'] as Map<String, dynamic>?;
+          final Map<String, dynamic>? errorUser = json['user'] as Map<String, dynamic>?;
+          final String errorAuthorId = (errorAuthor?['userId'] ?? errorAuthor?['_id'] ?? errorUser?['userId'] ?? errorUser?['_id'] ?? userId ?? '').toString();
+          
           return _Post(
-            userName: 'Unknown',
+            userName: errorAuthorId.isNotEmpty ? errorAuthorId : (userId ?? ''),
             text: 'Error loading post',
+            avatarUrl: null,
             likes: 0,
             comments: 0,
             createdAt: DateTime.now(),
@@ -224,6 +263,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return AppColors.outline;
   }
 
+  // Logout and Delete Account handlers
+  Future<void> _handleLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await routerDelegate.logout();
+        // Router will automatically rebuild and show login page
+        // The ValueNotifier listener ensures notifyListeners() is called when _isAuthenticated changes
+      } catch (e) {
+        if (mounted) {
+          UiUtils.showTopSnackBar(
+            context: context,
+            message: UiUtils.friendlyErrorMessage(e),
+            isError: true,
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handleDeleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final userId = _session.userId;
+      if (userId == null || userId.isEmpty) {
+        UiUtils.showTopSnackBar(
+          context: context,
+          message: 'User not logged in',
+          isError: true,
+        );
+        return;
+      }
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      try {
+        await _profilesRepository.deleteAccount(userId);
+        await routerDelegate.logout();
+        
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          UiUtils.showTopSnackBar(
+            context: context,
+            message: 'Account deleted successfully',
+            isSuccess: true,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          UiUtils.showTopSnackBar(
+            context: context,
+            message: UiUtils.friendlyErrorMessage(e),
+            isError: true,
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = _accessibilityManager.isDarkMode;
@@ -231,6 +376,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     return Scaffold(
       backgroundColor: _getBackgroundColor(),
+      bottomNavigationBar: AccessibleBottomNav(
+        currentIndex: -1, // Profile is not in main navigation
+        onTap: (index) {
+          // Simply pop back to home screen
+          // User can then use the bottom nav from HomeShell to navigate to the desired tab
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        },
+        onAddTap: () {
+          // Pop back to home, then navigate to community and open composer
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+            // After popping, try to find HomeShell and open composer
+            // We'll use a post-frame callback to ensure navigation is complete
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              // Try to find the community screen and open composer
+              // Since we can't directly access HomeShell, we'll navigate to community tab
+              // The user will need to manually open composer from there, or we can use a different approach
+              // For now, just pop back - the user can use the plus button from HomeShell
+            });
+          }
+        },
+      ),
       appBar: AppBar(
         backgroundColor: _getSurfaceColor(),
         foregroundColor: _getTextPrimary(),
@@ -333,6 +502,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             _loadProfileData();
                             }
                           },
+                          onLogout: () => _handleLogout(context),
+                          onDeleteAccount: () => _handleDeleteAccount(context),
                         ),
                       ),
                       // Tab Bar
@@ -461,6 +632,8 @@ class _InstagramProfileHeader extends StatelessWidget {
     required this.getSurfaceColor,
     required this.getOutlineColor,
     required this.onEdit,
+    required this.onLogout,
+    required this.onDeleteAccount,
   });
 
   final Profile? profile;
@@ -474,6 +647,8 @@ class _InstagramProfileHeader extends StatelessWidget {
   final Color Function() getSurfaceColor;
   final Color Function() getOutlineColor;
   final VoidCallback onEdit;
+  final VoidCallback onLogout;
+  final VoidCallback onDeleteAccount;
 
   String _getFullImageUrl(String? url) {
     if (url == null || url.isEmpty) return '';
@@ -485,7 +660,7 @@ class _InstagramProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = profile?.displayName ?? 'User';
+    final displayName = profile?.displayName ?? (profile?.userId ?? '');
     final photoUrl = profile?.photoUrl;
     final fullPhotoUrl = photoUrl != null && photoUrl.isNotEmpty
         ? _getFullImageUrl(photoUrl)
@@ -579,6 +754,55 @@ class _InstagramProfileHeader extends StatelessWidget {
                     'Edit Profile',
                     style: TextStyle(
                       color: getTextPrimary(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Logout and Delete Account buttons
+          Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onLogout,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    side: BorderSide(color: getOutlineColor()),
+                  ),
+                  icon: Icon(Icons.logout, color: getTextPrimary()),
+                  label: Text(
+                    'Logout',
+                    style: TextStyle(
+                      color: getTextPrimary(),
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onDeleteAccount,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    side: BorderSide(color: AppColors.error),
+                  ),
+                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  label: const Text(
+                    'Delete Account',
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -771,6 +995,7 @@ class _ThoughtCard extends StatelessWidget {
             builder: (_) => ProfilePostDetailScreen(
               userName: thought.userName,
               text: thought.text,
+              avatarUrl: thought.avatarUrl,
               imageUrls: thought.imageUrls,
               videoPath: thought.videoPath,
               likes: thought.likes,
@@ -897,6 +1122,7 @@ class _MediaGridItem extends StatelessWidget {
             builder: (_) => ProfilePostDetailScreen(
               userName: post.userName,
               text: post.text,
+              avatarUrl: post.avatarUrl,
               imageUrls: post.imageUrls,
               videoPath: post.videoPath,
               likes: post.likes,
@@ -1180,7 +1406,7 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = profile?.displayName ?? 'User';
+    final displayName = profile?.displayName ?? (profile?.userId ?? '');
     final photoUrl = profile?.photoUrl;
     final fullPhotoUrl = photoUrl != null && photoUrl.isNotEmpty
         ? _getFullImageUrl(photoUrl)
@@ -1285,6 +1511,7 @@ class _PostGrid extends StatelessWidget {
                 builder: (_) => ProfilePostDetailScreen(
                   userName: p.userName,
                   text: p.text,
+                  avatarUrl: p.avatarUrl,
                   imageUrls: p.imageUrls,
                   videoPath: p.videoPath,
                   likes: p.likes,
@@ -1363,6 +1590,7 @@ class ProfilePostDetailScreen extends StatelessWidget {
     super.key,
     required this.userName,
     required this.text,
+    this.avatarUrl,
     required this.imageUrls,
     required this.videoPath,
     required this.likes,
@@ -1371,6 +1599,7 @@ class ProfilePostDetailScreen extends StatelessWidget {
 
   final String userName;
   final String text;
+  final String? avatarUrl;
   final List<String> imageUrls;
   final String? videoPath;
   final int likes;
@@ -1386,6 +1615,7 @@ class ProfilePostDetailScreen extends StatelessWidget {
           CommunityPostCard(
             userName: userName,
             text: text,
+            avatar: avatarUrl != null ? NetworkImage(avatarUrl!) : null,
             imageUrls: imageUrls,
             videoPath: videoPath,
             likes: likes,
@@ -1401,6 +1631,7 @@ class _Post {
   _Post({
     required this.userName,
     required this.text,
+    this.avatarUrl,
     this.imageUrls = const [],
     this.videoPath,
     this.audioPath,
@@ -1412,6 +1643,7 @@ class _Post {
 
   final String userName;
   final String text;
+  final String? avatarUrl;
   final List<String> imageUrls;
   final String? videoPath;
   final String? audioPath; // For audio files
@@ -1432,11 +1664,27 @@ class _Post {
                  json['transcript'] as String? ?? 
                  '';
 
-    // Get user name
-    final userName = json['userName'] as String? ?? 
-                     json['user']?['displayName'] as String? ?? 
-                     json['author']?['displayName'] as String? ?? 
-                     'You';
+    // Get user name and avatar
+    final Map<String, dynamic>? author = json['author'] as Map<String, dynamic>?;
+    final Map<String, dynamic>? user = json['user'] as Map<String, dynamic>?;
+    final String authorId = (author?['userId'] ?? author?['_id'] ?? user?['userId'] ?? user?['_id'] ?? '').toString();
+    
+    // Try to get displayName from various sources
+    String? displayName = json['userName'] as String? ?? 
+                         user?['displayName'] as String? ?? 
+                         author?['displayName'] as String?;
+    
+    // If still null and we have authorId, check if it's the current user (use session)
+    if (displayName == null && authorId.isNotEmpty) {
+      // Note: We can't access session here, but the profile screen will handle this
+      // by using the profile data it already loaded for the current user
+      displayName = authorId; // Fallback to userId
+    }
+    
+    // Always use userId if displayName is not available (never show default names)
+    final String userName = displayName ?? authorId;
+    final String? authorPhotoUrl = author?['imageUrl'] ?? author?['photoUrl'] ?? author?['avatarUrl'] ?? 
+                                   user?['imageUrl'] ?? user?['photoUrl'] ?? user?['avatarUrl'];
 
     // Handle images - check community posts format FIRST (media array), then other formats
     final imageUrls = <String>[];
@@ -1562,9 +1810,18 @@ class _Post {
     }
     createdAt ??= DateTime.now();
 
+    // Build full avatar URL if available
+    String? avatarUrl;
+    if (authorPhotoUrl != null && authorPhotoUrl.isNotEmpty) {
+      avatarUrl = (authorPhotoUrl.startsWith('http://') || authorPhotoUrl.startsWith('https://'))
+          ? authorPhotoUrl
+          : '$apiBaseUrl$authorPhotoUrl';
+    }
+    
     final post = _Post(
       userName: userName.toString(),
       text: text.toString(),
+      avatarUrl: avatarUrl,
       imageUrls: imageUrls,
       videoPath: videoPath,
       audioPath: audioPath,

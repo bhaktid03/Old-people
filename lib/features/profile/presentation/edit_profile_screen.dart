@@ -160,14 +160,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       // Update profile via API
-      await _profilesRepository.updateProfile(
+      final updatedProfile = await _profilesRepository.updateProfile(
         userId: userId,
         displayName: name,
         photoFile: _photoFile, // Will be null if no new photo selected
       );
 
-      // Update session with new display name
-      await _session.saveUser(userId: userId, displayName: name);
+      // Update session with new display name and photo URL
+      await _session.saveUser(
+        userId: userId, 
+        displayName: name,
+        photoUrl: updatedProfile.photoUrl,
+      );
 
       if (mounted) {
         UiUtils.showTopSnackBar(

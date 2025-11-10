@@ -9,6 +9,7 @@ import '../../../api/profiles/profiles_repository.dart';
 import '../../../api/profiles/models/profile.dart';
 import '../../../api/common/endpoints.dart';
 import '../../../app/theme/colors.dart';
+import '../../profile/presentation/profile_screen.dart';
 
 class NewsHomeScreen extends StatefulWidget {
   const NewsHomeScreen({super.key});
@@ -157,7 +158,7 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
         : null;
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : AppColors.surface,
         boxShadow: [
@@ -170,13 +171,26 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
       ),
       child: Row(
         children: [
-          // Profile Circle at Left
+          // Profile Circle at Left - Clickable to navigate to profile
           GestureDetector(
             onTap: () {
-              // Navigate to profile - you can add navigation here
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(),
+                ),
+              );
             },
-            child: CircleAvatar(
-              radius: 28,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.brand.withOpacity(0.3),
+                  width: 2,
+                ),
+              ),
+              child: CircleAvatar(
+              radius: 24,
               backgroundColor: AppColors.outline.withOpacity(0.3),
               backgroundImage: fullPhotoUrl != null
                   ? NetworkImage(fullPhotoUrl)
@@ -184,12 +198,30 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
               child: fullPhotoUrl == null
                   ? Icon(
                       Icons.person,
-                      size: 32,
+                      size: 28,
                       color: isDark 
                       ? Colors.white70 
                       : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
                     )
                   : null,
+              ),
+            ),
+          ),
+          
+          // App Name Heading
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              'Chaupal',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: isDark 
+                    ? Colors.white 
+                    : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
+                height: 1.2,
+              ),
             ),
           ),
           
@@ -208,38 +240,41 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
                     : null,
                 icon: Icon(
                   Icons.text_decrease,
-                  size: 28,
+                  size: 20,
                   color: isDark 
                       ? Colors.white70 
                       : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
                 ),
                 tooltip: 'Decrease font size',
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(4),
                 constraints: const BoxConstraints(
-                  minWidth: 48,
-                  minHeight: 48,
+                  minWidth: 36,
+                  minHeight: 36,
                 ),
               ),
               
               // Font Size Label
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                constraints: const BoxConstraints(maxWidth: 50),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 decoration: BoxDecoration(
                   color: isDark 
                       ? Colors.white.withOpacity(0.1)
                       : AppColors.outline.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   _accessibilityManager.fontScaleLabel,
                   style: TextStyle(
-                    fontSize: (14 * _accessibilityManager.fontScale).clamp(12.0, 18.0),
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: isDark 
                         ? Colors.white 
                         : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
                   ),
                   overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
                 ),
               ),
               
@@ -253,20 +288,20 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
                     : null,
                 icon: Icon(
                   Icons.text_increase,
-                  size: 28,
+                  size: 20,
                   color: isDark 
                       ? Colors.white70 
                       : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
                 ),
                 tooltip: 'Increase font size',
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(4),
                 constraints: const BoxConstraints(
-                  minWidth: 48,
-                  minHeight: 48,
+                  minWidth: 36,
+                  minHeight: 36,
                 ),
               ),
               
-              const SizedBox(width: 8),
+              const SizedBox(width: 2),
               
               // Theme Mode Toggle (Light -> Warm -> Dark -> Light)
               IconButton(
@@ -275,7 +310,7 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
                 },
                 icon: Icon(
                   _accessibilityManager.themeModeIcon,
-                  size: 28,
+                  size: 20,
                   color: isDark 
                       ? Colors.white70 
                       : (_accessibilityManager.isWarmMode 
@@ -283,10 +318,10 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
                           : AppColors.textPrimary),
                 ),
                 tooltip: 'Switch theme (${_accessibilityManager.themeModeLabel})',
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(4),
                 constraints: const BoxConstraints(
-                  minWidth: 48,
-                  minHeight: 48,
+                  minWidth: 36,
+                  minHeight: 36,
                 ),
               ),
             ],
@@ -308,7 +343,10 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
     }
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: (16 * _accessibilityManager.fontScale).clamp(14.0, 20.0),
+      ),
       decoration: BoxDecoration(
         color: filterBarColor,
         border: Border(
@@ -322,83 +360,89 @@ class _NewsHomeScreenState extends State<NewsHomeScreen> {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.filter_list_rounded,
-            size: 24 * _accessibilityManager.fontScale,
-            color: isDark ? Colors.white70 : AppColors.textPrimary,
+          // Top divider line
+          Container(
+            height: 1,
+            color: isDark 
+                ? Colors.white.withOpacity(0.1)
+                : (isWarm 
+                    ? const Color(0xFFD4C4B0).withOpacity(0.5)
+                    : AppColors.outline.withOpacity(0.3)),
+            margin: const EdgeInsets.only(bottom: 12),
           ),
-          const SizedBox(width: 12),
-          Text(
-            'Source:',
-            style: TextStyle(
-              fontSize: 18 * _accessibilityManager.fontScale,
-              fontWeight: FontWeight.w600,
-                      color: isDark 
-                          ? Colors.white 
-                          : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: isDark 
-                    ? Colors.white.withOpacity(0.1)
-                    : AppColors.outline.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
+          // Label
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.newspaper_rounded,
+                  size: (22 * _accessibilityManager.fontScale).clamp(20.0, 26.0),
                   color: isDark 
-                      ? Colors.white.withOpacity(0.2)
-                      : AppColors.outline,
-                  width: 1.5,
-                ),
-              ),
-              child: DropdownButton<String?>(
-                value: _selectedSource,
-                isExpanded: true,
-                underline: const SizedBox(),
-                hint: Text(
-                  'All Sources',
-                  style: TextStyle(
-                    fontSize: 18 * _accessibilityManager.fontScale,
-                    color: isDark 
                       ? Colors.white70 
-                      : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
-                  ),
+                      : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textPrimary),
                 ),
-                items: _newsSources.map((source) {
-                  return DropdownMenuItem<String?>(
-                    value: source['value'],
-                    child: Text(
-                      source['label']!,
-                      style: TextStyle(
-                        fontSize: 18 * _accessibilityManager.fontScale,
-                        fontWeight: FontWeight.w500,
-                        color: isDark 
+                const SizedBox(width: 8),
+                Text(
+                  'Choose News Source:',
+                  style: TextStyle(
+                    fontSize: (18 * _accessibilityManager.fontScale).clamp(16.0, 22.0),
+                    fontWeight: FontWeight.w700,
+                    color: isDark 
                         ? Colors.white 
                         : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
-                      ),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _selectedSource = newValue;
-                  });
-                  _loadHeadlines();
-                },
-                icon: Icon(
-                  Icons.arrow_drop_down,
-                  size: 28 * _accessibilityManager.fontScale,
-                  color: isDark 
-                      ? Colors.white70 
-                      : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
+                  ),
                 ),
-              ),
+              ],
             ),
+          ),
+          // Divider line below label
+          Container(
+            height: 1,
+            color: isDark 
+                ? Colors.white.withOpacity(0.1)
+                : (isWarm 
+                    ? const Color(0xFFD4C4B0).withOpacity(0.5)
+                    : AppColors.outline.withOpacity(0.3)),
+            margin: const EdgeInsets.only(bottom: 12),
+          ),
+          // Horizontal scrollable buttons
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _newsSources.map((source) {
+                final isSelected = _selectedSource == source['value'];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _SourceButton(
+                    label: source['label']!,
+                    isSelected: isSelected,
+                    isDark: isDark,
+                    isWarm: isWarm,
+                    fontScale: _accessibilityManager.fontScale,
+                    onTap: () {
+                      setState(() {
+                        _selectedSource = source['value'];
+                      });
+                      _loadHeadlines();
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          // Bottom divider line
+          Container(
+            height: 1,
+            color: isDark 
+                ? Colors.white.withOpacity(0.1)
+                : (isWarm 
+                    ? const Color(0xFFD4C4B0).withOpacity(0.5)
+                    : AppColors.outline.withOpacity(0.3)),
+            margin: const EdgeInsets.only(top: 12),
           ),
         ],
       ),
@@ -785,5 +829,87 @@ class _NewspaperStyleCard extends StatelessWidget {
     } else {
       return 'Just now';
     }
+  }
+}
+
+class _SourceButton extends StatelessWidget {
+  const _SourceButton({
+    required this.label,
+    required this.isSelected,
+    required this.isDark,
+    required this.isWarm,
+    required this.fontScale,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final bool isDark;
+  final bool isWarm;
+  final double fontScale;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Selected button styling
+    Color backgroundColor;
+    Color textColor;
+    Color borderColor;
+    
+    if (isSelected) {
+      backgroundColor = AppColors.brand;
+      textColor = Colors.white;
+      borderColor = AppColors.brand;
+    } else {
+      if (isDark) {
+        backgroundColor = Colors.white.withOpacity(0.1);
+        textColor = Colors.white70;
+        borderColor = Colors.white.withOpacity(0.2);
+      } else if (isWarm) {
+        backgroundColor = const Color(0xFFE8D9C4).withOpacity(0.5);
+        textColor = const Color(0xFF4A3A2A);
+        borderColor = const Color(0xFFD4C4B0);
+      } else {
+        backgroundColor = AppColors.outline.withOpacity(0.1);
+        textColor = AppColors.textPrimary;
+        borderColor = AppColors.outline.withOpacity(0.3);
+      }
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: (20 * fontScale).clamp(18.0, 26.0),
+          vertical: (14 * fontScale).clamp(12.0, 18.0),
+        ),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 2.5 : 2,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.brand.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: (17 * fontScale).clamp(15.0, 21.0),
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: textColor,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
+    );
   }
 }

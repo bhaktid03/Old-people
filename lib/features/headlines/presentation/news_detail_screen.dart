@@ -37,6 +37,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   final ThoughtsRepository _thoughtsRepository = ThoughtsRepository();
   final SessionManager _sessionManager = SessionManager();
   final TtsService _ttsService = TtsService();
+  final AccessibilityManager _accessibilityManager = AccessibilityManager();
   String? _playingId;
   bool _isUploading = false;
   bool _isLoadingThoughts = false;
@@ -114,6 +115,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _accessibilityManager.addListener(_onAccessibilityChanged);
     // initial load from backend
     _loadThoughts();
     // Listen to player state changes to update UI in real-time
@@ -207,24 +209,200 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
   @override
   void dispose() {
+    _accessibilityManager.removeListener(_onAccessibilityChanged);
     _playerStateSubscription?.cancel();
     _positionSubscription?.cancel();
     _ttsService.stop();
     super.dispose();
   }
 
+  void _onAccessibilityChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Widget _buildTopBar(bool isDark, bool isWarm) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Back button
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: Icon(
+              Icons.arrow_back,
+              size: 24,
+              color: isDark 
+                  ? Colors.white70 
+                  : (isWarm ? const Color(0xFF6B5A4A) : AppColors.textSecondary),
+            ),
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 36,
+            ),
+          ),
+          
+          // Title (truncated)
+          Expanded(
+            child: Text(
+              widget.headline.title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark 
+                    ? Colors.white 
+                    : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          
+          const SizedBox(width: 8),
+          
+          // Accessibility Controls at Right
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Font Size Decrease Button
+              IconButton(
+                onPressed: _accessibilityManager.currentFontScaleIndex > 0
+                    ? () {
+                        _accessibilityManager.decreaseFontSize();
+                      }
+                    : null,
+                icon: Icon(
+                  Icons.text_decrease,
+                  size: 20,
+                  color: isDark 
+                      ? Colors.white70 
+                      : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
+                ),
+                tooltip: 'Decrease font size',
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+              ),
+              
+              // Font Size Label
+              Container(
+                constraints: const BoxConstraints(maxWidth: 50),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark 
+                      ? Colors.white.withOpacity(0.1)
+                      : AppColors.outline.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _accessibilityManager.fontScaleLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDark 
+                        ? Colors.white 
+                        : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              
+              // Font Size Increase Button
+              IconButton(
+                onPressed: _accessibilityManager.currentFontScaleIndex < 
+                    _accessibilityManager.maxFontScaleIndex
+                    ? () {
+                        _accessibilityManager.increaseFontSize();
+                      }
+                    : null,
+                icon: Icon(
+                  Icons.text_increase,
+                  size: 20,
+                  color: isDark 
+                      ? Colors.white70 
+                      : (isWarm ? const Color(0xFF4A3A2A) : AppColors.textPrimary),
+                ),
+                tooltip: 'Increase font size',
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+              ),
+              
+              const SizedBox(width: 2),
+              
+              // Theme Mode Toggle (Light -> Warm -> Dark -> Light)
+              IconButton(
+                onPressed: () {
+                  _accessibilityManager.toggleThemeMode();
+                },
+                icon: Icon(
+                  _accessibilityManager.themeModeIcon,
+                  size: 20,
+                  color: isDark 
+                      ? Colors.white70 
+                      : (_accessibilityManager.isWarmMode 
+                          ? const Color(0xFF6B5A4A) 
+                          : AppColors.textPrimary),
+                ),
+                tooltip: 'Switch theme (${_accessibilityManager.themeModeLabel})',
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = _accessibilityManager.isDarkMode;
+    final isWarm = _accessibilityManager.isWarmMode;
+    
     // Apply text scale to the whole page for consistent sizing
     final scaledMedia = MediaQuery.of(context).copyWith(
-      textScaleFactor: _textScale,
+      textScaleFactor: _textScale * _accessibilityManager.fontScale,
     );
+
+    // Get background color based on theme
+    Color backgroundColor;
+    if (isDark) {
+      backgroundColor = const Color(0xFF121212);
+    } else if (isWarm) {
+      backgroundColor = const Color(0xFFF5E6D3); // Warm beige
+    } else {
+      backgroundColor = AppColors.background;
+    }
 
     return MediaQuery(
       data: scaledMedia,
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(widget.headline.title, style: Theme.of(context).textTheme.titleMedium),
+      backgroundColor: backgroundColor,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: _buildTopBar(isDark, isWarm),
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(Spacing.md),
@@ -570,6 +748,10 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       );
       return;
     }
+    
+    // Get displayName from session, fallback to userId
+    final displayName = _sessionManager.displayName;
+    final userName = displayName ?? userId;
 
     final result = await showShareThoughtsModal<String>(context);
     if (result != null && mounted) {
@@ -606,7 +788,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 0,
                 ViewerThought(
                   id: tempId,
-                  userName: 'You',
+                  userName: userName,
                   type: ThoughtType.audio,
                   localFilePath: path,
                   text: (transcript != null && transcript.isNotEmpty) ? transcript : null,
@@ -708,7 +890,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 0,
                 ViewerThought(
                   id: tempId,
-                  userName: 'You',
+                  userName: userName,
                   type: ThoughtType.text,
                   text: text.trim(),
                   createdAt: DateTime.now(),
@@ -772,7 +954,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 0,
                 ViewerThought(
                   id: tempId,
-                  userName: 'You',
+                  userName: userName,
                   type: ThoughtType.video,
                   localFilePath: videoPath,
                   createdAt: DateTime.now(),

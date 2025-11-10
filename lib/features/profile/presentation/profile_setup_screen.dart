@@ -235,14 +235,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
     try {
       // Update profile via API
-      await _profilesRepository.updateProfile(
+      final updatedProfile = await _profilesRepository.updateProfile(
         userId: userId,
         displayName: name,
         photoFile: _photoFile,
       );
 
-      // Update session with new display name
-      await _session.saveUser(userId: userId, displayName: name);
+      // Update session with new display name and photo URL
+      await _session.saveUser(
+        userId: userId, 
+        displayName: name,
+        photoUrl: updatedProfile.photoUrl,
+      );
 
       if (mounted) {
         UiUtils.showTopSnackBar(

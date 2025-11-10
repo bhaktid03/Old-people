@@ -29,5 +29,8 @@ class ProfilesRepository {
         displayName: displayName,
         photoFile: photoFile,
       );
+
+  /// Delete user account
+  Future<void> deleteAccount(String userId) => _api.deleteAccount(userId);
 }
 

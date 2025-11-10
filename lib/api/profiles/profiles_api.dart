@@ -78,5 +78,13 @@ class ProfilesApi {
       return Profile.fromJson(profileData as Map<String, dynamic>);
     }
   }
+
+  /// Delete user account
+  /// DELETE /api/v1/profiles/{userId}
+  Future<void> deleteAccount(String userId) async {
+    await _apiClient.deleteJson(
+      url: Endpoints.deleteAccount(userId),
+    );
+  }
 }
 

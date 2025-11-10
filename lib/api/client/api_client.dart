@@ -113,6 +113,52 @@ class ApiClient {
     throw HttpException(message, uri: Uri.parse(url));
   }
 
+  Future<Map<String, dynamic>> deleteJson({
+    required String url,
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    if (_enableLogging) {
+      print('[ApiClient] DELETE $url');
+      if (headers != null && headers.isNotEmpty) {
+        print('[ApiClient] Headers: ${jsonEncode(headers)}');
+      }
+    }
+
+    final HttpClientRequest request = await _httpClient.deleteUrl(Uri.parse(url));
+    request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+    if (headers != null) {
+      headers.forEach(request.headers.set);
+    }
+
+    final HttpClientResponse response = await request.close().timeout(timeout);
+    final String responseBody = await response.transform(utf8.decoder).join();
+
+    if (_enableLogging) {
+      print('[ApiClient] Status: ${response.statusCode}');
+      print('[ApiClient] Response body: ${responseBody.isEmpty ? '<empty>' : responseBody}');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (responseBody.isEmpty) return <String, dynamic>{};
+      final dynamic decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return <String, dynamic>{'data': decoded};
+    }
+
+    // Try to extract server error message
+    String message = 'HTTP ${response.statusCode}';
+    try {
+      final dynamic decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic> && decoded['error'] is String) {
+        message = decoded['error'] as String;
+      }
+    } catch (_) {
+      // ignore
+    }
+    throw HttpException(message, uri: Uri.parse(url));
+  }
+
   Future<Map<String, dynamic>> getJson({
     required String url,
     Map<String, String>? headers,

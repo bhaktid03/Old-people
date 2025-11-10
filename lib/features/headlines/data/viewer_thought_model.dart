@@ -41,9 +41,20 @@ class ViewerThought {
     final contentType = json['contentType'] as String?;
     final typeStr = contentType ?? json['type'] as String? ?? 'text';
     
+    // Get userId from various possible fields
+    final String? userId = json['userId'] as String? ?? 
+                          json['user']?['userId'] as String? ?? 
+                          json['user']?['_id'] as String? ??
+                          json['author']?['userId'] as String? ??
+                          json['author']?['_id'] as String?;
+    
     return ViewerThought(
       id: json['_id']?.toString() ?? json['id'].toString(),
-      userName: json['userName'] as String? ?? 'Anonymous',
+      userName: json['userName'] as String? ?? 
+                json['user']?['displayName'] as String? ??
+                json['author']?['displayName'] as String? ??
+                userId ??
+                '',
       type: ThoughtType.fromString(typeStr),
       text: json['text'] as String? ?? content?['text'] as String?,
       audioUrl: json['audioUrl'] as String?,

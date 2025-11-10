@@ -3,7 +3,6 @@ import '../widgets/bottom_nav.dart';
 import '../features/headlines/presentation/news_home_screen.dart';
 import '../features/community/presentation/community_wall_screen.dart';
 import '../features/chat/presentation/chat_list_screen.dart';
-import '../features/profile/presentation/profile_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -21,7 +20,6 @@ class _HomeShellState extends State<HomeShell> {
     const NewsHomeScreen(),
     CommunityWallScreen(key: _communityKey),
     const ChatListScreen(),
-    const ProfileScreen(),
   ];
 
   @override
@@ -71,10 +69,21 @@ class _HomeShellState extends State<HomeShell> {
         body: SafeArea(child: _pages[_index]),
         bottomNavigationBar: AccessibleBottomNav(
           currentIndex: _index,
-          onTap: (i) => setState(() => _index = i),
+          onTap: (i) {
+            setState(() => _index = i);
+          },
           onAddTap: () {
             // Open the composer from community screen
-            _communityKey.currentState?.openComposer();
+            // If not on community tab, switch to it first
+            if (_index != 1) {
+              setState(() => _index = 1);
+              // Wait a bit for the tab to switch, then open composer
+              Future.delayed(const Duration(milliseconds: 100), () {
+                _communityKey.currentState?.openComposer();
+              });
+            } else {
+              _communityKey.currentState?.openComposer();
+            }
           },
         ),
       ),

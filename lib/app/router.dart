@@ -8,13 +8,18 @@ import '../core/ui/ui_utils.dart';
 import '../features/profile/presentation/profile_setup_screen.dart';
 import '../core/session/session_manager.dart';
 
+final _routerDelegate = _AppRouterDelegate();
+
 final appRouter = RouterConfig<Object>(
-	routerDelegate: _AppRouterDelegate(),
+	routerDelegate: _routerDelegate,
 	routeInformationParser: _AppRouteInformationParser(),
 	routeInformationProvider: PlatformRouteInformationProvider(
 		initialRouteInformation: const RouteInformation(location: '/'),
 	),
 );
+
+// Expose router delegate for logout/delete account functionality
+_AppRouterDelegate get routerDelegate => _routerDelegate;
 
 class _AppRouterDelegate extends RouterDelegate<Object>
 		with ChangeNotifier, PopNavigatorRouterDelegateMixin<Object> {
@@ -30,6 +35,16 @@ class _AppRouterDelegate extends RouterDelegate<Object>
 
 	_AppRouterDelegate() {
 		_initialize();
+		// Listen to authentication state changes and notify listeners
+		_isAuthenticated.addListener(() {
+			notifyListeners();
+		});
+	}
+
+	@override
+	void dispose() {
+		_isAuthenticated.dispose();
+		super.dispose();
 	}
 
 	Future<void> _initialize() async {
@@ -93,6 +108,21 @@ class _AppRouterDelegate extends RouterDelegate<Object>
 
 	void _onEditPhone() {
 		_awaitingOtp = false;
+		notifyListeners();
+	}
+
+	/// Logout user - clears session and redirects to sign up page
+	Future<void> logout() async {
+		await _session.clear();
+		// Reset all state
+		_awaitingOtp = false;
+		_needsProfileSetup = false;
+		_phoneNumber = null;
+		_prefillDisplayName = null;
+		// Set authentication to false - this will trigger the ValueNotifier listener
+		// which calls notifyListeners(), causing the router to rebuild
+		_isAuthenticated.value = false;
+		// Also call notifyListeners() directly to ensure immediate rebuild
 		notifyListeners();
 	}
 
