@@ -1,0 +1,11 @@
+# .gitignore
+
+# Virtual Environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Secret keys
+.env

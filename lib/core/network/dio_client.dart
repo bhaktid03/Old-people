@@ -7,9 +7,11 @@ class DioClient {
 
   DioClient._internal() {
     dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000'),
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 20),
+      baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://127.0.0.1:8000'),
+      // Whisper + LLM can take longer on CPU; increase timeouts
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 180),
+      sendTimeout: const Duration(seconds: 60),
     ));
   }
 }
